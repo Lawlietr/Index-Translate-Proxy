@@ -1,0 +1,15 @@
+# Cloudflare Workers（免費方案即可）。name 決定 workers.dev 子網域：
+#   https://<account>-index-translate-proxy.<account>.workers.dev
+name = "index-translate-proxy"
+compatibility_date = "2026-10-01"
+
+# 骨架階段：入口還沒建立，所以這行先註解掉，不假裝能部署。
+# 建立 src/worker.js 時把它打開（AGENTS.md 待辦 1）。
+# main = "src/worker.js"
+
+# 執行期可調的閾值（皆為字串，Worker 內會轉數字並套預設值）。
+# MAX_INPUT_CHARS：超過就切塊。35B 在約 4000 字元輸入會截斷，1500 安全（姐妹專案實測）。
+# MAX_INFLIGHT：單 isolate 同時進上游的請求數；插件端也該設「每秒最大請求數 3~5」。
+[vars]
+MAX_INPUT_CHARS = "3500"
+MAX_INFLIGHT = "4"
