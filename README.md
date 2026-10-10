@@ -1,11 +1,10 @@
 # Index-Translate-Proxy
 
-把 bilibili **Index-Translate**（免費的翻譯模型，OpenAI 相容 API）變成**你自己的一份**私有端點，
-貼進瀏覽器插件或其他 OpenAI 相容 client 就能用。它是個薄代理：不改 prompt、不換模型、不快取，
-只做「能被插件用上」需要的那幾件事——固定 UA、路徑正規化、強制串流、必要的切塊、一把**你自己的**門。
+把 bilibili **Index-Translate**（免費的翻譯模型，OpenAI 相容 API）接成一個 OpenAI 相容端點，
+貼進瀏覽器插件或其他 client 就能用。它是個薄代理：不改 prompt、不換模型、不快取，
+只做「能被插件用上」需要的那幾件事——固定 UA、路徑正規化、強制串流、必要的切塊，外加一把通行碼。
 
-**這個 repo 不提供公共實例，也不共用 key。** 專案的目的就是讓你自己部署一份：上游免費、不需 GPU、
-不需上游的帳號，五分鐘內網址、通行碼和配額都是你自己的。別人想用，自己部署一份就是。
+部署在自己的 Vercel 專案上：免費、不需 GPU、不需上游的帳號，五分鐘跑起來。
 
 用它來做：
 
@@ -19,8 +18,8 @@
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FLawlietr%2FIndex-Translate-Proxy&project-name=index-translate-proxy&repository-name=index-translate-proxy&env=ITP_KEY&envDescription=%E4%BD%A0%E8%87%AA%E5%B7%B1%E8%A8%AD%E5%AE%9A%E7%9A%84%E9%80%9A%E8%A1%8C%E7%A2%BC%EF%BC%88openssl%20rand%20-hex%2032%EF%BC%89&envLink=https%3A%2F%2Fgithub.com%2FLawlietr%2FIndex-Translate-Proxy%2Fblob%2Fmain%2FREADME.md)
 
-**必填只有一項：`ITP_KEY`** —— 你自己隨意定的一串字，客戶端要帶它才能用。這是**你的門**，
-跟上游無關（上游免費、不需 key）。產生一把：
+**必填只有一項：`ITP_KEY`** —— 你自己隨意定的一串字，客戶端要帶它才能用（不是上游的 key，上游不需鑑權）。
+產生一把：
 
 ```bash
 openssl rand -hex 32    # 輸出就是之後填進插件「API Key」欄位的值
