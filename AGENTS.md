@@ -1,14 +1,17 @@
 # AGENTS.md — Index-Translate-Proxy
 
-> **狀態：第一版已實裝、已部署並做過線上探測（線上 9/19）。** `src/worker.js` + `src/lib/{route,headers,auth,model,chunk,stream,limits}.js`、
-> `tests/*.test.mjs`（67 條離線）、`scripts/{smoke-local,probe-live,probe-upstream,lint-zh}.mjs` 都在。
-> 本地 `wrangler dev`（miniflare，打真上游）通過 `probe-live` 的 19 項——**但那不是線上**：
-> 規則 13 要求的「打真的 worker」還沒跑，因為還沒 `wrangler deploy`。本檔的規則是實作的約束，
-> 不是已上線行為的宣傳。
+> **狀態：第一版已實裝，主部署在 Vercel 並已做過線上探測（`probe-live` 19 ok / 0 fail / 1 skip）。**
+> 一份協定碼、兩個入口：`api/index.js`（Vercel Edge runtime，**現行主入口**）與
+> `src/worker.js`（Cloudflare Worker，保留，但**因出口 412 目前打不到上游**）。
+> `src/lib/` 協定碼不重複、`tests/*.test.mjs`（77 條離線，含入口橋接）、
+> `scripts/{probe-live,probe-sse-timing,smoke-local,probe-upstream,lint-zh}.mjs`。
+> 本檔的規則是實作的約束，不是已上線行為的宣傳；線上行為的證據在 `design/egress-options.md` 與
+> `design/upstream-probe-2026-10-10.md`。
 
 ## Project Overview
 
-一個 **Cloudflare Worker**，把 bilibili **Index-Translate** 的免費公網 API 以同源端點對外提供，供
+一個 **Vercel 上的 Edge 函式**（同一份協定碼也有 **Cloudflare Worker** 入口，因出口 412 暫未启用），把 bilibili
+**Index-Translate** 的免費公網 API 以同源端點對外提供，供
 **沉浸式翻譯（Immersive Translate）** 等瀏覽器插件與其他 OpenAI 相容客戶端使用。無 UI、無前端。
 
 存在的理由是上游的 **WAF**：特定機器人 UA 會被 412 擋（見下表），所以瀏覽器以外的 client（插件的背景腳本、
@@ -88,6 +91,9 @@
    閘滿先在**本地排隊**（`SLOT_WAIT_MS`，預設 15 秒），等不到才回 **429 + `Retry-After: 2`**，並建議把插件的
    「每秒最大請求數」設 3~5。上游的配額是**按 IP** 的（見上表「配額」列），而 Worker 的 egress IP 是共用池 →
    保護只能自己做；上游回的 429 與 `retry-after` 要原樣透傳（規則 6）。细节在 `design/streaming-and-chunking.md` §2。
+   **但這個閘在兩個平台都是 per-instance**（2026-10-10 線上實測：Vercel 把 12 個併發分散到 6+ 個實例，一個都不擋；
+   線上探測因此對這一項只驗證 429 的**形狀**，不宣稱全域保護）。真的全域閘需 Durable Objects（CF）或外部計數
+   （Vercel，付費）→ v1 不做了，所以**規則 7 是尽力而為的保護，主要防线仍是插件端的並發設定**。
 8. **先鑑權，再轉發；key 不進上游。** worker 必須先驗證**共用的 `ITP_KEY`**（讀 `Authorization: Bearer`，
    退回 `x-api-key`；設計與錯誤形狀見 `design/auth.md`）。驗證在**任何上游請求之前**完成，
    401 不消耗上游配額；**驗完即丟**——不轉發 `Authorization`、`x-api-key`、`cookie`、CF 的 `x-*` 標頭，
@@ -103,10 +109,13 @@
 11. **所有使用者可見文字與程式註解一律繁體中文**（與姐妹專案規則 15 相同）。上游的簡體模板原文照引時標注出處。
 12. **CI 放 `.forgejo/workflows/`，不放 `.github/workflows/`**（`origin` 是自建 Forgejo 15.0.9）。
     程式碼已在，所以 CI 是該補的一項（見 TODO）；但在它之前，**部署與線上探測優先**。
-13. **部署是測試環的一環：**`wrangler deploy` 之後必須用**真的 worker** 跑一次探測，至少覆蓋
+13. **部署是測試環的一環：**部署後必須用**真的線上入口**跑一次探測（`node scripts/probe-live.mjs <base>`；主入口现为
+    Vercel，CF 那側也要跑一次以記錄出口狀態），至少覆蓋
     插件的 `/v1` 路徑形狀、UA（腳本 UA 打 worker 不該 412）、未知模型的 400、超長段的切塊接回、
     **拆塊請求中途失敗時的 status 與 `x-proxy-chunk-failed`**、**`GET /` 的一行回應與 `x-proxy-auth`**、
-    未帶 key 的 401 形狀、上游 429 的 `retry-after` 是否原樣送出。
+    未帶 key 的 401 形狀、上游 429 的 `retry-after` 是否原樣送出，以及**串流是真的增量**
+    （`node scripts/probe-sse-timing.mjs <base>`；**量測 client 要用 curl**，本機 JS client 會把小塊合併，
+    量出來的「緩衝」是假象——這個誤判發生過一次）。
     「本機跑過」在這種上傳產物／edge 部署的情境裡不代表線上。
 14. **文件分工：**`TODO.md` 只放待做項目與最多五項已完成（置底）；設計、實測紀錄、規格拆解一律放
     `design/`；更早的完成紀錄查 `git log --oneline`。同一件事的真相只能有一處——`AGENTS.md` 寫結論，

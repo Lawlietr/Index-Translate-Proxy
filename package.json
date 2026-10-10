@@ -14,9 +14,14 @@
     "lint:zh": "node scripts/lint-zh.mjs",
     "smoke": "node scripts/smoke-local.mjs",
     "probe": "node scripts/probe-upstream.mjs",
-    "probe-live": "node scripts/probe-live.mjs"
+    "probe-live": "node scripts/probe-live.mjs",
+    "dev:vercel": "vercel dev --listen 8788",
+    "deploy:vercel": "vercel deploy --prod --yes",
+    "env:vercel": "node scripts/set-env-vercel.mjs",
+    "probe:timing": "node scripts/probe-sse-timing.mjs"
   },
   "devDependencies": {
-    "wrangler": "^4.148.0"
+    "wrangler": "^4.148.0",
+    "vercel": "^63.1.2"
   }
 }

@@ -150,6 +150,26 @@ export function getGate(limit) {
   return sharedGate
 }
 
+/**
+ * 純記憶體的視窗限流，介面與 CF 的 `[[ratelimits]]` 綁定一致（`get(key)` → `{success, limit, period}`）。
+ * 用在沒有綁定可用的平台（Vercel／本地 dev）。層級差異要誠實：CF 的綁定跨請求共用，這裡只覆蓋
+ * **同一個實例**——serverless 沒有跨實例的計數器，所以它是較弱的保護，不是等價物（README 照這個說法寫）。
+ */
+export function memoryRateLimit({ limit = 30, period = 60 } = {}, store = new Map()) {
+  return {
+    get(key) {
+      const window = Math.floor(Date.now() / (period * 1000))
+      const rec = store.get(key)
+      if (!rec || rec.window !== window) {
+        store.set(key, { window, count: 1 })
+        return { success: true, limit, period }
+      }
+      rec.count += 1
+      return rec.count > limit ? { success: false, limit, period } : { success: true, limit, period }
+    },
+  }
+}
+
 /** 給測試：清掉執行期的快取，避免跨案污染。 */
 export function resetGateForTests() {
   sharedGate = null

@@ -1,11 +1,13 @@
 # Index-Translate-Proxy
 
-一個 **Cloudflare Worker**：把 bilibili **Index-Translate** 的免費公網 API
-（`https://index-translate.bilibili.com/v1`）以**同源端點**的形式提供出去，讓瀏覽器插件
+一個 **Vercel 上的 Edge 函式**（同一份協定碼也保留 **Cloudflare Worker** 入口）：把 bilibili **Index-Translate**
+的免費公網 API（`https://index-translate.bilibili.com/v1`）以**同源端點**的形式提供出去，讓瀏覽器插件
 （**沉浸式翻譯 Immersive Translate** 的「OpenAI 翻譯服務 + 自訂接口地址」）與其他 OpenAI 相容
 客戶端可以直接使用 35B 翻譯模型。本 repo 只做代理，不做 UI。
 
-> 狀態：**程式碼與離線測試已就緒，尚未部署**（還沒有自己的 subdomain，見 [`TODO.md`](TODO.md) §0）。
+> 狀態：**已上線** —— `https://index-translate-proxy.vercel.app`（線上探測 19 ok / 0 fail / 1 skip，
+> 串流兩側皆真增量）。**主入口在 Vercel**；CF Worker 那份因**出口被上游風控 412**而目前打不到上游
+> （原因與選項見 [`design/egress-options.md`](design/egress-options.md)）。
 > 實作規則與設計決策在 [`AGENTS.md`](AGENTS.md) 與 [`design/`](design/)。
 
 ## 為什麼需要一個代理（不是「可有可無」）
@@ -36,21 +38,32 @@
 
 ## 快速開始
 
+自己部署（**Vercel**，現行主入口）：
+
 ```bash
 git clone git@github.com:Lawlietr/Index-Translate-Proxy.git
 cd Index-Translate-Proxy
-npm install
-cp .dev.vars.example .dev.vars              # 本地開發用的 ITP_KEY
-npx wrangler secret put ITP_KEY             # 線上：沒有這把 key，代理一律回 503（不會變成公開）
-npx wrangler deploy                          # 免費層即可；Account 由 wrangler 自己讀，不寫進設定檔
+# 1. Vercel 專案 → Import 這個 repo（Framework 選 Other；構建命令與輸出目錄都不需要）
+# 2. Settings → Environment Variables → Production：ITP_KEY = 自己產生（openssl rand -hex 32）
+# 3. 部署，然後設 Allowlist 關閉
 ```
 
-**一键部署按鈕**（自帶 `name`／`compatibility_date`／`compatibility_flags`，不含 Secrets 與 `vars`）
-的參數定案在 [`design/deploy-button.md`](design/deploy-button.md)；本 repo 還沒有 `deploy/`，
-所以在這裡補上徽章之前，只能用上面的命令部署。
+沒有 `ITP_KEY` 時代理一律回 **503**（不會變成公開）。上線後跑一次探測確認：
 
-部署後打開 `https://<你的 worker>/` 會看到一行說明與 `x-proxy-auth: configured|missing`——
+```bash
+node scripts/probe-live.mjs https://<你的專案>.vercel.app   # 19 項協定檢查（規則 13）
+node scripts/probe-sse-timing.mjs https://<你的專案>.vercel.app  # 確認串流是真增量
+```
+
+部署後打開 `https://<你的專案>.vercel.app/` 會看到一行說明與 `x-proxy-auth: configured|missing`——
 不用翻控制台就知道自己有沒有設 key。
+
+**要部署到 Cloudflare？** 協定碼完全相同，但目前**從 CF 出口打上游會被風控 412**，
+所以那側部署出來的實例打不到上游（`design/egress-options.md`）。真要跑：
+`npx wrangler secret put ITP_KEY && npx wrangler deploy`。
+
+**一键部署按鈕**（Vercel 與 CF 兩個按鈕的參數定案）在 [`design/deploy-button.md`](design/deploy-button.md)；
+本 repo 還沒有 `deploy/`，所以在徽章上線前请用上面的步驟。
 
 ## 插件要怎麼填
 
@@ -158,22 +171,32 @@ npm run dev                 # 本地跑真的 Worker runtime（讀 .dev.vars）�
 npm test                    # node --test，離線：注入假的 fetch，不碰網路
 npm run smoke               # 端到端冒煙：在程序內跑 worker，逐條檢查主要路徑
 npm run lint:zh             # 規則 11：掃常見簡體字（註解與使用者文字都要繁體）
-node scripts/probe-live.mjs  # 部署後打真的 worker（規則 13）
-node scripts/probe-upstream.mjs --quick   # 打上游，結果存 tests/fixtures/
+node scripts/probe-live.mjs <base>          # 部署後打真的入口（規則 13）
+node scripts/probe-sse-timing.mjs <base>    # 線上串流是否真增量（用 curl 當 client）
+node scripts/probe-upstream.mjs --quick     # 打上游，結果存 tests/fixtures/
 ```
+
+**協定碼只有一份**（`src/lib/`）：`api/index.js`（Vercel Edge runtime，現行主入口）、`src/worker.js`
+（Cloudflare Worker，保留）、`api/probe.js`（一次性探測用）。本地開發以 `npm run dev`（miniflare）為主，
+它與 Vercel 入口跑同一組協定碼。
 
 離線測試覆蓋：路徑正規化（不產生 `/v1/v1`）、鑑權三態與限流、並發閘（排隊與 429 形狀）、切塊的
 行界與單行 413、`<think>` 前綴剝離、非串流客戶端的組包（`usage` 缺就不帶）、中途失敗的 status 語義、
-模型白名單。`tests/fixtures/` 是上游**實際回什麼**的原始存證（`choices: []`、`error_code: 7001`、
-SSE 的 `usage` 行為），改實作時要能對回去。
+模型白名單、入口橋接（`x-vercel-*`、函式 URL、拆塊）。`tests/fixtures/` 是上游**實際回什麼**的原始存證
+（`choices: []`、`error_code: 7001`、SSE 的 `usage` 行為），改實作時要能對回去。
 
 ## 已知限制（不要假裝比較不脆弱）
 
-- 上游無配額、無 SLA、免費，且**會撤回模型名稱**（`index-homura-*` 先例）。
-- 上游的 SSE 端到端緩衝（TTFT ≈ 總時間）→ 串流只是不斷線，**不會**比較快看到字。
+- 上游是**免費公網端點**：無 SLA、有 **60,000 tokens/min per IP** 的軟配額（超出回 429 + `retry-after`），
+  而 **Vercel/CF 的出口 IP 是共用池** → 那個額度不是我們獨佔的。上游也**會撤回模型名稱**（`index-homura-*` 先例）。
+- **並發閘是 per-instance**（兩個平台都一樣，已線上實測）→ 真正的保護是插件端的「每秒最大請求數 3~5」。
+- **从 Cloudflare 出口打不到上游**（412，全站）；從 Vercel 出口可以。原因與可行出口見 `design/egress-options.md`。
 - 輸出側截斷：上游預設 2,048 tokens。本代理會補到 4,096，但那只是把問題往後推，不是解決。
+  切塊因此是按**估計輸出 tokens**算，不是只看輸入字元。
 - 上游偶爾回 `choices: []` 的 200（探測 5/5 重現）→ 本代理**不重試**（規則 6 的代價）。
 - 上游模型代幣解碼有缺陷（「秦漢→秦漢」）；本代理是薄代理，不修上游的輸出。
+- 上游的 SSE **是真增量**（TTFT 0.2–1.0s，與輸入長度無關），所以串流不只是不斷線；但**非串流**超過 10s 會被 504
+  → 一律向上游要串流（規則 3）。
 
 ## 授權
 

@@ -34,9 +34,19 @@ export function authConfigured(env) {
   return Boolean(env && typeof env.ITP_KEY === "string" && env.ITP_KEY.trim())
 }
 
-/** 客戶端 IP：優先用 `cf-connecting-ip`（定案 6）。 */
+/**
+ * 客戶端 IP：定案 6 用 `cf-connecting-ip`（Cloudflare）。換平台時標頭名字不同，
+ * 但「只有一份讀取順序」——各入口不要再各自轉標頭。順序：CF → Vercel → 通用標頭 → 執行環境自帶的 ip。
+ */
 export function clientIp(request) {
-  return request.headers.get("cf-connecting-ip") || request.ip || "unknown"
+  const forwarded = String(request.headers.get("x-forwarded-for") || "").split(",")[0].trim()
+  return (
+    request.headers.get("cf-connecting-ip") ||
+    request.headers.get("x-real-ip") ||
+    forwarded ||
+    request.ip ||
+    "unknown"
+  )
 }
 
 /**

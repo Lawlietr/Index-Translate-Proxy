@@ -1,7 +1,11 @@
 node_modules/
 .wrangler/
+.wrangler-tmp/
 wrangler.log
 .dev.vars
+.vercel/
+.env
+.env.local
 
 # 探測產出的大個 SSE（>200KB）只留本地做除錯；數字已寫進 design/upstream-probe-*.md，小個 fixture 才進 repo
 tests/fixtures/len-*.sse
@@ -10,3 +14,6 @@ tests/fixtures/cap-no-max-tokens.sse
 
 # probe-live 的結果（每次跑都不同；結論寫進 design/，這裡只是除錯用）
 results/
+tasks/todo-*.json
+.vercel
+.env*
