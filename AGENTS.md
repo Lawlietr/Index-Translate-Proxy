@@ -16,6 +16,9 @@
 
 ## 上游事實（本 session 實測於 2026-10-08，非推測）
 
+> ⚠️ 2026-10-10 重測後，下表的**配額、串流行為、未知模型的錯誤形狀**三條已過時，
+> 修正內容列在 [`TODO.md`](TODO.md) 待做 1（落地前请勿照下表實作）。
+
 | 項目 | 實測結果 |
 |---|---|
 | 端點 | `POST https://index-translate.bilibili.com/v1/chat/completions`；`GET /v1/models` 只宣告 `Index-Translate-35B-A3B` |
@@ -45,9 +48,13 @@
    **已帶 `/v1` 的路徑絕不再補前綴**（會變成 `/v1/v1/…` → 上游 404）。其他路徑由本代理**本地 404**，不丟給上游。
 6. **上游錯誤不改 status、不改 body**，只在同一回應裡加 `hint`（我們的建議）。不包層、不重寫成 500。
 7. **並發有上限**（預設 4，`MAX_INFLIGHT` 可調），超過回 **429 + `Retry-After: 2`** 並建議把插件的
-   「每秒最大請求數」設 3~5。上游無配額可查，保護只能自己做。
-8. **不轉發 `Authorization`、`cookie`、CF 的 `x-*` 標頭**；對上游只帶 `content-type` 與 UA。
-   插件填的 key 是假的，沒必要帶進上游。
+   「每秒最大請求數」設 3~5。上游的真實配額是 **60,000 tokens/min per IP**（2026-10-10 實測，
+   超出回 429 + `retry-after: 1`），而 Worker 的 egress IP 是共用池 → 保護只能自己做，
+   且上游的 429 與 `retry-after` 要原樣透傳（規則 6）。
+8. **先鑑權，再轉發；key 不進上游。** worker 必須先驗證**共用的 `ITP_KEY`**（讀 `Authorization: Bearer`，
+   退回 `x-api-key`；設計與錯誤形狀見 `design/auth.md`）。驗證在**任何上游請求之前**完成，
+   401 不消耗上游配額；**驗完即丟**——不轉發 `Authorization`、`x-api-key`、`cookie`、CF 的 `x-*` 標頭，
+   對上游只帶 `content-type` 與 UA（上游不需鑑權）。
 9. **不注入 prompt 內容**；唯一允許的注入是 `chat_template_kwargs.enable_thinking:false`（上游目前預設已關，
    但官方文件要求客戶端顯式關閉，換端點時不會漏）。除此之外 prompt 是使用者的輸入，不改。
 10. **授權邊界：**MIT。上游 `bilibili/Index-Translate` 為 Apache-2.0、姐妹專案 `translate-cloud` 為 AGPL-3.0 →
@@ -57,16 +64,16 @@
 12. **CI 放 `.forgejo/workflows/`，不放 `.github/workflows/`**（`origin` 是自建 Forgejo 15.0.9）。
     但**先有程式碼才建 CI**——骨架階段加 CI 是假工。
 13. **部署是測試環的一環：**`wrangler deploy` 之後必須用**真的 worker** 跑一次探測，至少覆蓋
-    插件的 `/v1` 路徑形狀、UA（腳本 UA 打 worker 不該 412）、未知模型的 400、超長段的切塊接回。
+    插件的 `/v1` 路徑形狀、UA（腳本 UA 打 worker 不該 412）、未知模型的 400、超長段的切塊接回、
+    **未帶 key 的 401 形狀**、上游 429 的 `retry-after` 是否原樣送出。
     「本機跑過」在這種上傳產物／edge 部署的情境裡不代表線上。
+14. **文件分工：**`TODO.md` 只放待做項目與最多五項已完成（置底）；設計、實測紀錄、規格拆解一律放
+    `design/`；更早的完成紀錄查 `git log --oneline`。同一件事的真相只能有一處——`AGENTS.md` 寫結論，
+    證據與細節放 `design/`，`TODO.md` 只寫「要做什麼」。
 
-## 待辦（骨架 → 第一版）
+## 待辦
 
-1. `src/worker.js` + `src/lib/{route,headers,stream,limits}.js`（對應規則 2–6）。
-2. `tests/*.test.mjs`：用 `node --test` 打真實模組、注入假的 `fetch`，離線覆蓋規則 1–7。
-3. `scripts/probe-live.mjs`：規則 13 的探測。
-4. `.forgejo/workflows/ci.yml`（跑離線測試；label 與 image 沿用姐妹專案的 `mt`）。
-5. 部署與 `README` 補上實際 worker 網域。
+見 [`TODO.md`](TODO.md)（規則 14：待辦只在那一處）。
 
 ## 刻意不做
 
