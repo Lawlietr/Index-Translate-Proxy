@@ -32,7 +32,7 @@
    | 標頭安全 | 用 ASCII（hex／base64url）。非 ASCII 走 HTTP 標頭，各 client 處理不同，會以「key 不正確」的形式失敗 | 協定層；非本專案實測 |
    | 前後空白 | 兩側都 `trim()`；**全空白＝未設定 → 503** | 實作（2026-10-12 對齊，含測試） |
 
-   建議產生方式仍是 `openssl rand -hex 32`（64 字元，ASCII、無空白，不会踩到上面任何一條）。
+   建議產生方式仍是 `openssl rand -hex 32`（64 字元，ASCII、無空白，不會踩到上面任何一條）。
    日誌只記 `auth: ok | missing | invalid`。
 3. **讀取順序**：`Authorization: Bearer <key>` → 退回 `x-api-key`。**不**支援 query／path 帶 key
    （會留在瀏覽器歷史與 CF 日誌，也可能被 Referer 帶走）。

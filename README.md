@@ -25,6 +25,8 @@
 openssl rand -hex 32    # 輸出就是之後填進插件「API Key」欄位的值
 ```
 
+值本身沒有長度或格式要求（別帶前後空白、建議就用這種純 hex）。改了值之後要**重新部署**才生效。
+
 按按鈕 → 在那個欄位貼上這串 → Deploy。沒有構建步驟，不需要伺服器、不需要 GPU。
 不想用按鈕：Vercel → Import 這個 repo（Framework 選 Other）→ Environment Variables 加 `ITP_KEY` → Deploy。
 
