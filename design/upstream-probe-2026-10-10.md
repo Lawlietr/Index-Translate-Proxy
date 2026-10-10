@@ -1,0 +1,128 @@
+# design/upstream-probe-2026-10-10.md — 公網端點第二輪探測紀錄
+
+方法：`scripts/probe-upstream.mjs`（本輪新增）。分群組跑，每組只印一行摘要，原始證據寫進 `tests/fixtures/`
+（SSE／錯誤 body＋`probe-*.json` 摘要）。所有數字都是本輪實測，時間為 2026-10-10 19:11–19:25（台北）。
+UA 相關結論先做 self-check：用 httpbin 回憶標頭，證明 `node:https` 在「不設 UA」時**真的不送**該標頭
+（`ua-echo:none → (none → 真的沒送)`），否則「不送 UA 會怎樣」的結論不可信。
+
+請求形狀固定為：`POST /v1/chat/completions`，`stream: true`，`source_language: Chinese`、
+`target_translation: English`、`chat_template_kwargs.enable_thinking:false`，輸入是**編號行**
+（`1. …\n2. …`）以便用編號回傳判斷行覆蓋率——這正是插件的行對應協定。
+
+## 1. 最重要：截斷發生在**輸出側**，而且是可偵測的
+
+預設完成上限是 **2,048 completion tokens**，用完就停，`finish_reason` 給 **`"length"`**：
+
+| 輸入 | 輸入行數 | 回傳行數 | `finish_reason` | `completion_tokens` | 總時間 |
+|---|---|---|---|---|---|
+| 1,047 字元 | 18 | 18 ✅ | `stop` | — | 7.9s |
+| 1,524 | 26 | 26 ✅ | `stop` | — | 10.2s |
+| 2,001 | 34 | 34 ✅ | `stop` | — | 13.9s |
+| 2,200 | 38 | 38 ✅ | `stop` | 1,878 | 16.1s |
+| 2,400 | 41 | 41 ✅ | `stop` | 2,019 | 16.7s |
+| **2,600** | 44 | **42** ❌ | `length` | 2,048 | 16.3s |
+| 3,040 | 51 | 42 ❌ | `length` | 2,048 | 17.0s |
+| 4,050 | 68 | 42 ❌ | `length` | 2,048 | 18.8s |
+| 6,047 | 101 | 42 ❌ | `length` | 2,048 | 17.9s |
+
+三個不同輸入長度都停在**同樣的 10,311 字元輸出／42 行**——所以瓶頸不是輸入字數，是完成長度。
+「輸入約 4,000 字元會截斷」這個舊說法（來自未公開的姐妹專案）**不成立**，至少對 zh→en 不是這個機制。
+
+**上限可以抬高**（同一腳本 `raise` 群組）：
+
+| 請求 | 輸入行數 | 回傳 | `finish_reason` | `completion_tokens` | 時間 |
+|---|---|---|---|---|---|
+| `max_tokens: 40` | 15 | 1 | `length` | 40 | 1.0s |
+| `max_tokens: 4096` | 51 | **51 ✅** | `stop` | 2,512 | 35.7s |
+| `max_tokens: 8192` | 101 | 83 ❌ | `length` | **4,096** | 47.9s |
+
+- `max_tokens` 被**精確尊重**（要 40 就停在 40）。
+- 要 8192 卻停在恰好 4,096 → **推定上游把 max_tokens 鉗在 4,096**（要證明需再測 16384 一檔，見「未證明」）。
+- 3,040 字元在 `max_tokens:4096` 下**完整譯完**（51/51 行，2,512 tokens）。由此得 zh→en 的膨脹比
+  ≈ **0.83 completion tokens / 輸入字元**（3,040→2,512；6,047→約 5,000）。
+
+**對實作的影響（這條會改設計）：**
+1. 只按「輸入字元」切塊是錯的控制量；真正的約束是 `輸出 tokens ≤ 上游上限`。代理一律自己帶
+   `max_tokens: 4096`（客戶端有帶就尊重客戶端的），把可用預算從 2,048 抬到 4,096。
+2. 在此前提下，單塊輸入 ~3,000 字元（zh→en 實測完整）比原本的 1,500 保守值安全一倍以上；
+   `MAX_INPUT_CHARS` 定為 **2,500**（留 margin，見 `design/streaming-and-chunking.md`）。
+3. **必須檢查 `finish_reason === "length"`**：它是「尾部被丟」的唯一訊號。出現且不是客戶端自己要求的
+   `max_tokens` → 加 `x-proxy-chunk-truncated: <塊序>` ＋ hint，不可當正常完成。
+4. 生成到 2,000 tokens 要 16s、2,500 tokens 要 35s → 非串流必定撞上游 10s 504（規則 3 強制串流的理由，再次成立）。
+
+## 2. UA：黑名單是特定機器人字串，不是「沒有 UA」
+
+| UA | 結果 | 延遲 |
+|---|---|---|
+| 不送（self-check 證明真的沒送） | **200** | 771ms |
+| `User-Agent: ""`（空值） | 200 | 421ms |
+| `python-requests/2.32.3` | **412** | 93ms |
+| `Python-urllib/3.12` | **412** | 75ms |
+| `curl/8.5.0` | 200 | 415ms |
+| Chrome 126 完整 UA | 200 | 461ms |
+| `Cloudflare-Workers` | 200 | 456ms |
+| `Index-Translate-Proxy/0.1 (https://github.com/Lawlietr/Index-Translate-Proxy)` | 200 | 413ms |
+| `Index-Translate-Client/1.0`（官方客戶端） | 200 | 715ms |
+| Chrome UA ＋ `Referer`/`Accept-Language` | 200 | 720ms |
+
+- 2026-10-08 那輪的「不送 UA → 412」**重現不了**；現行政策是**特定機器人 UA 黑名單**（Python 系）。
+  舊紀錄可能是當時的請求實際帶著 UA（curl 預設就帶 `curl/x.y`），無法回溯驗證 → 舊那格標為不可信。
+- 412 的 body 是 **HTML 網頁（3,400 字元）**，不是 JSON，且 93ms 就回 → 代理**不能假設錯誤是 JSON**，
+  透傳時要按 content-type 處理；另外 412 來得這麼快，說明是 WAF 層擋的，沒進模型。
+- **決定（規則 2）**：固定用自訂、可識別的 UA：`Index-Translate-Proxy/0.1 (+repo URL)`。
+  實測 200，比假裝瀏覽器誠實，也能讓上游看出流量來源。
+
+## 3. 模型：`model` 回顯不可信，白名單外的名字會靜默換模型
+
+| 請求的 model | status | 回顯的 `model` |
+|---|---|---|
+| `Index-Translate-35B-A3B` | 200 | `Index-Translate-35B-A3B` |
+| `index-mt-9b`（400 自報清單裡的） | 200 | **`qwen35-9b-6624275-iter999`**（內部部署名） |
+| `Index-Translate-35B-A3B-preview` | 200 | `Index-Translate-35B-A3B` ← **靜默退回** |
+| `model: ""` | 200 | `Index-Translate-35B-A3B` |
+| `index-homura-35b-a3b`（已撤回） | 400 | — |
+| `gpt-4o-mini` | 400 | — |
+
+400 的 body（兩檔相同格式）：`{"detail":"未知模型 '<name>'，公开支持模型: Index-Translate-35B-A3B, index-mt-2b, index-mt-9b, index-mt-2b-syllable, index-mt-9b-syllable"}`
+
+→ 回顯值可能是內部部署名，也可能被換成 35B-A3B，**不能拿來驗證跑的是哪個模型**。規則 1 只放行
+`Index-Translate-35B-A3B`、其餘本地 400，這條现在有證據。400 用 `detail` 欄位而不是 OpenAI 的
+`error` 形狀 → 若要給客戶端清楚的訊息，得由我們補 hint（規則 6），不能改 body。
+
+## 4. `usage`：預設不給，但可以被要到
+
+| 請求 | usage |
+|---|---|
+| `stream:true`（不帶其他） | **無** |
+| `stream:true, stream_options:{include_usage:true}` | 有：`{"completion_tokens":33,"prompt_tokens":68,"total_tokens":101,"prompt_tokens_details":{"cached_tokens":64}}` |
+| 非串流 | 有 |
+
+→ 代理強制串流會把 usage 弄丢，所以自己補 `stream_options:{include_usage:true}`（規則 9 的協議層注入）。
+這也讓我們能用**實際 completion tokens** 控制切塊，而不是靠字元猜。
+另外 prompt tokens 與字元數的比例依文本而變：本輪 6,047 字元 → 3,901 tokens（0.65），
+2,400 字元 → 1,584（0.66）；而 2026-10-10 早間 3,800 字元 → 3,644（0.96）。**所以別用字元換算 token。**
+
+## 5. 思考標記：公網端點沒有可見差異
+
+`enable_thinking:false` 與 `true`：輸出 186 vs 183 字元、41 vs 40 個 delta、**兩者都沒有** `<think>`／`<|im_*|>`
+標記。維持早間的結論：公網端點預設已等同關閉，規則 9 的注入是「換端點不漏」的保險，不是當下必需。
+
+## 6. 配額與併發：沒碰到 429，但併發只增加延遲
+
+- 12 串流請求（每個 900 字元輸入、約 20k tokens／90 秒）：**全 200，未觸發 429**。
+- 10 個**併發**請求（每個 2,400 字元、共約 36k tokens）：全 200，但總時間從 21.9s 變成 **47.8s（≈5 倍）**，
+  每個的回傳量一模一樣（2,019 tokens）→ **上游大致是串行處理的，併發不增加吞吐，只增加延遲**。
+  這是規則 7（本地並發上限 4）與「插件每秒最大請求數 3~5」最直接的證據。
+- 本輪未再現 429，也沒有配額查詢端點可查 → 429 的 body 形狀沿用早間記錄（見 `AGENTS.md` 事實表），
+  尚未有 429 的 fixture；離線測試先用手抄的真實 body（待做 5）。
+- 單發延遲基線：小請求 TTFT 170–560ms／總 400–770ms；900 字元 173–473ms TTFT／6.0–7.2s 總；
+  6,047 字元 TTFT 375–1,019ms／17.9–19.0s。**TTFT 與輸入長度無關** → 真增量再次確認（早間那條結論穩）。
+
+## 未證明（下一輪再補，成本都不高）
+
+1. `max_tokens` 是否被鉗在 4,096：只需一檔 `max_tokens:16384` ＋ 6,000 字元輸入。
+2. 429 的真實 fixture：要把 token 堆到 60k/min 才會觸發（估計要 ~25 個 2,400 字元請求在一分鐘內）。
+3. 其他語言方向的膨脹比：只測了 zh→en；`en→zh`、`ja→zh` 的 output/input 比例可能差很多，
+   直接影響 `MAX_INPUT_CHARS` 的邊界（對繁體中文→中文這種不翻譯的情況還沒看過）。
+4. 從 Cloudflare edge 打上游的實際延遲（規則 13，要部署後測）。
+5. 上游是否會因 `max_tokens:4096` 這類注入而改變其他行為（只測過 2,512 tokens 的成功案例）。

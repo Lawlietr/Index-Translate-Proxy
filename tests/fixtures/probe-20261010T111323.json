@@ -1,0 +1,41 @@
+{
+  "ranAt": "2026-10-10T11:13:23.080Z",
+  "groups": [
+    "selfcheck"
+  ],
+  "rows": [
+    {
+      "group": "selfcheck",
+      "case": "ua-echo:none",
+      "status": 200,
+      "firstByteMs": null,
+      "sse": false,
+      "bytes": 63,
+      "err": null,
+      "retryAfter": null,
+      "echoed": "(none → 真的沒送)"
+    },
+    {
+      "group": "selfcheck",
+      "case": "ua-echo:empty",
+      "status": 200,
+      "firstByteMs": null,
+      "sse": false,
+      "bytes": 79,
+      "err": null,
+      "retryAfter": null,
+      "echoed": ""
+    },
+    {
+      "group": "selfcheck",
+      "case": "ua-echo:custom",
+      "status": 200,
+      "firstByteMs": null,
+      "sse": false,
+      "bytes": 112,
+      "err": null,
+      "retryAfter": null,
+      "echoed": "Index-Translate-Proxy/0.1 (probe)"
+    }
+  ]
+}

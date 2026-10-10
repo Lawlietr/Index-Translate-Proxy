@@ -14,17 +14,20 @@
 
 官方教學自己就在端點前面放了一座橋（`python call_api.py --serve`），理由寫在
 `inference/llm/README_zh.md`：瀏覽器直連公網端點受「跨域（CORS）、WAF 保護、思維鏈（CoT）」三項限制。
-2026-10-08 實測、2026-10-10 覆核後，三項裡只有 **WAF 一項是真的**，但那一項就足以讓非瀏覽器客戶端全數 412：
+2026-10-08 首次實測、2026-10-10 重測覆核後，三項裡只有 **WAF 一項是真的**——但它的規則比官方描述的窄：
+擋的是**特定機器人 UA**，不是「不像瀏覽器」。
 
-| 官方列的限制 | 實測（2026-10-08） |
+| 官方列的限制 | 實測（2026-10-10） |
 |---|---|
 | CORS | 不成立：帶 `Origin` 時回 `access-control-allow-origin: *` |
 | CoT 格式 | 不成立：不帶 `chat_template_kwargs` 也不吐思考標記，端點預設已等同關閉思考 |
-| **WAF 保護** | **成立**：`Python-urllib` / `python-requests` 的 UA → **412**；瀏覽器樣式 UA、`Cloudflare-Workers`、甚至空字串 → 200；完全不送 UA → 412 |
+| **WAF 保護** | **成立**：`Python-urllib` / `python-requests` 的 UA → **412**；自訂 UA、瀏覽器 UA、`Cloudflare-Workers`、空字串、甚至完全不送 UA → **200** |
 
-另外兩項**只有代理能處理**的真實限制：上游把「非串流且輸出超過 10.0s」的請求以 **HTTP 504** 砍掉
-（所以本代理一律向上游要串流），以及很長的輸入會被截斷（上限正在本 repo 重測）。兩者的實測日期與證據都在
-[`AGENTS.md`](AGENTS.md)。
+另外兩項**只有代理能處理**的真實限制：上游把「非串流且輸出超過 10.0s」的請求以 **HTTP 504** 砍掉；
+而生成有**輸出側**的預設上限（2,048 tokens，用完就停並回 `finish_reason:"length"`），長文會無聲缺尾。
+本代理的做法是一律向上游要串流、把 `max_tokens` 抬到 4,096（你自己帶了就聽你的），並在行界切塊。
+實測數字、方法與日期在 [`AGENTS.md`](AGENTS.md) 的事實表與
+[`design/upstream-probe-2026-10-10.md`](design/upstream-probe-2026-10-10.md)。
 
 ## 插件要怎麼填（實作完成後）
 
@@ -35,6 +38,20 @@
 | 模型名稱 | `Index-Translate-35B-A3B` |
 | API Key | **填本代理的 key**（部署時設的 `ITP_KEY`）。上游本身不需鑑權，這把 key 只是這個代理的門，不會被轉發出去 |
 | 每秒最大請求數 | **3~5**（官方教學同值）。上游按 IP 限 **60,000 tokens/min**，而 worker 的出口 IP 是共用池 → 不限速就會先撞到 429 |
+
+## 代理會對上游改什麼（逐項透明列出）
+
+| 改動的 | 值 | 為什麼 |
+|---|---|---|
+| `User-Agent` | `Index-Translate-Proxy/0.1 (+repo)` | 上游只擋**特定機器人 UA**（`python-requests/*`、`Python-urllib/*` → 412）。不轉發你的 UA |
+| `stream` | 一律 `true` | 非串流超過 10 秒會被上游 504 砍。你那邊是非串流的話，我們把 SSE 組回一個完整回應 |
+| `max_tokens` | 4096（**你自己帶了就聽你的**） | 上游預設只生成 2,048 tokens，長文會被無聲截尾（`finish_reason:"length"`） |
+| `stream_options.include_usage` | `true` | 上游串流預設不給 `usage`，補了才看得到 token 用量 |
+| `chat_template_kwargs.enable_thinking` | `false` | 官方文件要求客戶端顯式關閉（換端點時不會漏） |
+
+除此之外**不改東西**：不改 prompt 的文字、不換模型（只放行 `Index-Translate-35B-A3B`）、上游回錯時不改
+status 也不改 body，只在同一回應加 `x-proxy-hint`。超過約 2,500 字元的輸入會**在行界切塊**、依原本的
+分隔字元接回——`1. 2. 3.` 這種編號行不會錯位。
 
 ## 授權
 

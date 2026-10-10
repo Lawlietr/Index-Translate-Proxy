@@ -1,0 +1,123 @@
+{
+  "ranAt": "2026-10-10T11:13:02.471Z",
+  "groups": [
+    "selfcheck",
+    "usage",
+    "think"
+  ],
+  "rows": [
+    {
+      "group": "selfcheck",
+      "case": "ua-echo:none",
+      "status": 200,
+      "firstByteMs": null,
+      "sse": false,
+      "bytes": 63,
+      "err": null,
+      "retryAfter": null,
+      "echoed": "(none)"
+    },
+    {
+      "group": "selfcheck",
+      "case": "ua-echo:empty",
+      "status": 200,
+      "firstByteMs": null,
+      "sse": false,
+      "bytes": 79,
+      "err": null,
+      "retryAfter": null,
+      "echoed": "(none)"
+    },
+    {
+      "group": "selfcheck",
+      "case": "ua-echo:custom",
+      "status": 200,
+      "firstByteMs": null,
+      "sse": false,
+      "bytes": 112,
+      "err": null,
+      "retryAfter": null,
+      "echoed": "(none)"
+    },
+    {
+      "group": "usage",
+      "case": "stream-plain",
+      "status": 200,
+      "ms": 1038,
+      "firstByteMs": 389,
+      "sse": true,
+      "bytes": 8840,
+      "err": null,
+      "retryAfter": null,
+      "usage": null,
+      "deltas": 32
+    },
+    {
+      "group": "usage",
+      "case": "stream-include-usage",
+      "status": 200,
+      "ms": 491,
+      "firstByteMs": 249,
+      "sse": true,
+      "bytes": 9137,
+      "err": null,
+      "retryAfter": null,
+      "usage": {
+        "completion_tokens": 33,
+        "prompt_tokens": 68,
+        "total_tokens": 101,
+        "prompt_tokens_details": {
+          "cached_tokens": 64
+        }
+      },
+      "deltas": 32
+    },
+    {
+      "group": "usage",
+      "case": "non-stream",
+      "status": 200,
+      "ms": 415,
+      "firstByteMs": 414,
+      "sse": false,
+      "bytes": 743,
+      "err": null,
+      "retryAfter": null,
+      "usage": {
+        "completion_tokens": 33,
+        "prompt_tokens": 68,
+        "total_tokens": 101,
+        "prompt_tokens_details": {
+          "cached_tokens": 64
+        }
+      }
+    },
+    {
+      "group": "think",
+      "case": "thinking-off",
+      "status": 200,
+      "ms": 682,
+      "firstByteMs": 349,
+      "sse": true,
+      "bytes": 11139,
+      "err": null,
+      "retryAfter": null,
+      "think_marks": 0,
+      "deltas": 41,
+      "out_chars": 186
+    },
+    {
+      "group": "think",
+      "case": "thinking-on",
+      "status": 200,
+      "ms": 547,
+      "firstByteMs": 163,
+      "sse": true,
+      "bytes": 10874,
+      "err": null,
+      "retryAfter": null,
+      "think_marks": 0,
+      "deltas": 40,
+      "out_chars": 183
+    }
+  ]
+}

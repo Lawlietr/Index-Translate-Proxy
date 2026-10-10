@@ -2,3 +2,8 @@ node_modules/
 .wrangler/
 wrangler.log
 .dev.vars
+
+# 探測產出的大個 SSE（>200KB）只留本地做除錯；數字已寫進 design/upstream-probe-*.md，小個 fixture 才進 repo
+tests/fixtures/len-*.sse
+tests/fixtures/raise-*.sse
+tests/fixtures/cap-no-max-tokens.sse

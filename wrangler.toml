@@ -8,10 +8,13 @@ compatibility_date = "2026-10-01"
 # main = "src/worker.js"
 
 # 執行期可調的閾值（皆為字串，Worker 內會轉數字並套預設值）。
-# MAX_INPUT_CHARS：超過就切塊。暫定 1500 = 保守值，依據只有未重測的舊紀錄；
-#   階梯重測後才調整（TODO.md 待做 1、design/streaming-and-chunking.md）。
+# MAX_INPUT_CHARS：超過就切塊。2,500 = 依 2026-10-10 探測定的邊界（上游截斷在**輸出側**：預設 2,048
+#   completion tokens；代理自己帶 max_tokens:4096 後 3,040 字元仍完整譯完，這裡留膨脹餘量）。
+#   數字與方法見 design/upstream-probe-2026-10-10.md §1。
+# MAX_TOKENS_DEFAULT：送給上游的 max_tokens 預設值；客戶端自己帶 max_tokens 就用客戶端的（規則 9）。
 # MAX_INFLIGHT：單 isolate 同時進上游的**塊**數（一個拆三塊的請求佔三個額度，規則 7）。
-#   插件端也該設「每秒最大請求數 3~5」。
+#   上游近乎串行：10 個併發只把延遲拉成 5 倍，不增加吞吐 → 插件端也該設「每秒最大請求數 3~5」。
 [vars]
-MAX_INPUT_CHARS = "1500"
+MAX_INPUT_CHARS = "2500"
+MAX_TOKENS_DEFAULT = "4096"
 MAX_INFLIGHT = "4"

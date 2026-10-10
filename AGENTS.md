@@ -1,7 +1,7 @@
 # AGENTS.md — Index-Translate-Proxy
 
 > **狀態：骨架。** 只有 `package.json`、`wrangler.toml`、`.gitignore`、`LICENSE`、`README.md`、`TODO.md`、
-> `design/`（三份設計檔）與本檔。`src/` 與測試**尚未建立**，因此 `npm run dev`／`npm run deploy`／CI 都還不存在。
+> `design/`（四份設計檔：鑑權、部署按鈕、切塊／串流、上游探測紀錄）與本檔。`src/` 與測試**尚未建立**（`tests/fixtures/` 只有探測證據，不是測試），因此 `npm run dev`／`npm run deploy`／CI 都還不存在。
 > 本檔的規則是實作時的約束，不是已實裝的行為描述。
 
 ## Project Overview
@@ -9,30 +9,33 @@
 一個 **Cloudflare Worker**，把 bilibili **Index-Translate** 的免費公網 API 以同源端點對外提供，供
 **沉浸式翻譯（Immersive Translate）** 等瀏覽器插件與其他 OpenAI 相容客戶端使用。無 UI、無前端。
 
-存在的理由是上游的 **WAF**：非瀏覽器 UA 會被 412 擋（下表）。除此之外它是**薄代理**——不改 prompt、
-不換模型、不做快取。
+存在的理由是上游的 **WAF**：特定機器人 UA 會被 412 擋（見下表），所以瀏覽器以外的 client（插件的背景腳本、
+其他 server 端工具）需要一個固定 UA 的出口。除此之外它是**薄代理**——不改 prompt、不換模型、不做快取。
 
 **License: MIT.**（上游是 Apache-2.0，無傳染性；規則 10 講清楚邊界。）
 
 ## 上游事實（公網端點實測，非推測）
 
-列末標注實測日期。2026-10-10 的重測推翻了首測（2026-10-08）的**配額、串流行為、未知模型的錯誤形狀**三條，
-本表已是重測後的結論；原始證據（請求形狀、時間、回應片段）待落成 `design/upstream-probe-2026-10-10.md`
-（[`TODO.md`](TODO.md) 待做 1）。
+列末標注實測日期。本表是 2026-10-10 第二輪重測後的結論，已推翻首測（10-08）的「無配額」「SSE 端到端緩衝」「不送 UA → 412」
+「未知模型回 404」「輸入 4,000 字元截斷」五條。原始證據（請求形狀、時間、SSE、錯誤 body）在
+`design/upstream-probe-2026-10-10.md` 與 `tests/fixtures/`；跑法：`node scripts/probe-upstream.mjs [群組]`。
+尚未證明的項目列在同檔「未證明」節，不要當成事實。
 
 | 項目 | 實測結果 |
 |---|---|
 | 端點 | `POST https://index-translate.bilibili.com/v1/chat/completions` 與 `/v1/responses`（真 SSE，`response.output_text.delta`）均可用；`/v1/completions` 上游**不存在**（404）；`GET /v1/models` 只宣告 `Index-Translate-35B-A3B` 〔2026-10-10〕 |
-| **UA 門檻** | 不送 `User-Agent` → **412**；`User-Agent: ""` → **200**；`Python-urllib/*`、`python-requests/*` → **412**（機器人黑名單）；`curl/8.5.0`、瀏覽器 UA、`Cloudflare-Workers`、自訂 token → **200**。加 `Referer`/`Accept-Language` 不能補救〔2026-10-08〕。官方自己的客戶端用 `Index-Translate-Client/1.0` → 200，所以**不必假裝瀏覽器**（規則 2 的 UA 形式見 `TODO.md` 待做 1） |
+| **UA 門檻** | 瓶頸是**特定機器人 UA 黑名單**，不是「有沒有 UA」：`python-requests/*`、`Python-urllib/*` → **412**（HTML 網頁，3,400 字元，93ms 內回，沒進模型）；不送 UA（已用回憶服務自證真的沒送）、`UA: ""`、`curl/8.5.0`、瀏覽器 UA、`Cloudflare-Workers`、`Index-Translate-Client/1.0`、自訂 token → 全部 **200**。加 `Referer`/`Accept-Language` 沒影響。首測（10-08）那格「不送 UA → 412」重現不了，標為不可信〔2026-10-10〕 |
 | CORS | 帶 `Origin` 時回 `access-control-allow-origin: *`（不帶 `Origin` 時不回此頭 → 用 `curl` 驗證時必須帶 `Origin`，否則會誤判為沒開 CORS）〔2026-10-08〕 |
-| 思考標記 | 不帶 `chat_template_kwargs` 與明確傳 `enable_thinking:false` 的輸出**完全相同**，三種模式都不吐 `<think>` → 公網端點預設已等同關閉。開思考的實際風險是**生成變長 → 撞 10s 504** 與摻入非譯文文字，不是標籤洩漏〔2026-10-10〕 |
+| 思考標記 | 不帶 `chat_template_kwargs`、明確 `enable_thinking:false`、明確 `true` 三種都**不吐** `<think>`／`<|im_*|>`；`true` 與 `false` 的輸出長度無差異（183 vs 186 字元）→ 公網端點預設已等同關閉。規則 9 的注入是換端點時的保險，不是當下必需〔2026-10-10〕 |
 | 多送的欄位 | `n`、`stop`、`presence_penalty`、`frequency_penalty`、`seed`、`user` 與 `Authorization: Bearer <任意字串>` 均可被上游接受（200）→ 純轉發可行〔2026-10-08〕 |
+| `usage` | 串流**預設不給**；帶 `stream_options:{include_usage:true}` 就有（含 `prompt_tokens_details.cached_tokens`）；非串流有 → 代理強制串流時要自己補這個參數才拿得到用量〔2026-10-10〕 |
+| 字元→token | 比例依文本變動大，**不可用字元換算**：本輪 6,047 字元 → 3,901 prompt tokens（0.65）、2,400 → 1,584（0.66）；早間另一文本 3,800 → 3,644（0.96）〔2026-10-10〕 |
 | 編號批次 | 三行一次送（`1. …\n2. …\n3. …`）→ 上游保留編號 → 插件的行對應協定可用〔2026-10-08〕 |
-| 未知模型 | 回 **400**（不是 404），且 400 的 body **自報白名單**：`Index-Translate-35B-A3B, index-mt-2b, index-mt-9b, index-mt-2b-syllable, index-mt-9b-syllable`；`Index-Translate-9B/2B/-preview` 回 200 且 `model` 原樣回顯（實際跑哪個未證明）；`model:""` → 靜默用 35B-A3B〔2026-10-10〕 |
-| 逾時 | 非串流且輸出超過 **10.0s** → 上游回 **HTTP 504**（openresty）。**SSE 是真增量**：1,400 字元輸入非串流 → 10.1s / 504；同一輸入 `stream:true` → 6.6s、TTFT 0.64s、757 個 delta（首測「端到端緩衝、TTFT≈總時間」已作廢）〔2026-10-10〕 |
-| 長度 | 「35B 輸入約 **4000 字元**會截斷、**1500** 安全」是**引用**（未公開的姐妹專案），本 repo 未重測 → 階梯式重測列在 `TODO.md` 待做 1。另測得 3,800 字元 ≈ 3,644 prompt tokens（CJK ≈ 1.04 token/字元），可用於字元數粗估〔2026-10-10〕 |
+| 未知模型 | 回 **400**（不是 404），body 用 `detail` 欄位而**不是** OpenAI 的 `error` 形狀，內容自報白名單：`Index-Translate-35B-A3B, index-mt-2b, index-mt-9b, index-mt-2b-syllable, index-mt-9b-syllable`。回顯的 `model` **不可信**：`index-mt-9b` → 200 且回 `qwen35-9b-6624275-iter999`（內部部署名）；`Index-Translate-35B-A3B-preview` → 200 但回 `Index-Translate-35B-A3B`（**靜默退回**）；`model:""` → 靜默用 35B-A3B；已撤回的 `index-homura-*` → 400〔2026-10-10〕 |
+| 逾時 | 非串流且輸出超過 **10.0s** → 上游回 **HTTP 504**（openresty）。**SSE 是真增量**：TTFT 170–1,020ms 且**與輸入長度無關**；生成 2,000 tokens 要 16s、2,512 tokens 要 35.7s → 強制串流是必須的（規則 3）〔2026-10-10〕 |
+| **輸出上限** | 截斷發生在**輸出側**：預設完成上限 **2,048 tokens**，用完就停並回 **`finish_reason:"length"`**（所以丟尾**可偵測**）。同一份 zh→en 測試文本：輸入 ≤2,400 字元（41 行）完整；≥2,600 字元只回 42 行，且 3,000/4,000/6,000 三者的輸出完全同長。`max_tokens` **被精確尊重**（要 40 就停 40）；`max_tokens:4096` 下 3,040 字元完整譯完（51/51 行、2,512 tokens）；`max_tokens:8192` 停在恰好 4,096 → **推定上游把 max_tokens 鉗在 4,096**（未證實）。zh→en 膨脹比 ≈ 0.83 completion tokens／輸入字元。**舊說法「輸入 4,000 字元會截斷」不成立**〔2026-10-10〕 |
 | 可達性 | `index-translate.bilibili.com` CNAME → `bilicdn1.com`（海外節點 `103.151.151.x`，`x-cache-webcdn: BYPASS`）→ 不是只在中國大陸可達；但**從 CF edge 的實際延遲未測**〔2026-10-08〕 |
-| 配額 | **有**：`60,000 tokens/min` **per IP**，超出回 **429** + `retry-after: 1`，body 為 `{"error":{"type":"rate_limit_error","code":429,"retry_after":1,…}}`。免費、不需金鑰、無 SLA、沒有配額查詢端點；bilibili 會撤回模型名稱（`index-homura-*` 先例）〔2026-10-10〕 |
+| 配額 | **有**：`60,000 tokens/min` **per IP**，超出回 **429** + `retry-after: 1`，body 為 `{"error":{"type":"rate_limit_error","code":429,"retry_after":1,…}}`（此形狀為早間實測；同日第二輪堆到 20k tokens/90s 與 36k tokens 併發都**未再觸發 429**，也無配額查詢端點）。**併發不增加吞吐**：10 個併發請求全部成功但總時間 21.9s → 47.8s（≈5 倍），上游近乎串行 → 本地並發上限是必要的（規則 7）。免費、不需金鑰、無 SLA；bilibili 會撤回模型名稱（`index-homura-*` 先例）〔2026-10-10〕 |
 
 模型可用性的三層證據（declared / 被網關接受但未宣告 / 已撤回）原本在**未公開的姐妹專案**
 `translate-cloud/design/model-selector.md`，對外不可查證 → 依規則 15，本表只留「未知模型」那列的自報白名單實測，
@@ -45,15 +48,19 @@
    風險來自上游自己就會靜默：`model:""` 直接跑 35B-A3B，`-preview` 這類名字回 200 但不保證跑的是那個。
    **本代理只放行 `Index-Translate-35B-A3B`**：上游 400 自報的其他模型（`index-mt-2b/9b/-syllable`）也一律
    **本地 400**，不做 alias、不做試探——要放行得先自己測過（`TODO.md` 待做 10）。
-2. **UA 由本代理固定為一個自己挑的 UA，不轉發客戶端 UA。** 這是本代理存在的主因（見上表：機器人 UA 會 412）。
-   字面值尚未定——上游並不要求瀏覽器樣式（官方自己的 `Index-Translate-Client/1.0` 也回 200），改成可識別的
-   自訂 UA 比較誠實；決定要做的補測列在 `TODO.md` 待做 1。
+2. **UA 由本代理固定為一個自訂、可識別的標識，不轉發客戶端 UA。** 上游擋的是**特定機器人 UA 黑名單**
+   （`python-requests/*`、`Python-urllib/*` → 412），不是「不像瀏覽器」——自訂 token 實測 200，
+   官方自己的客戶端也是自訂 token。固定值：`Index-Translate-Proxy/0.1 (+https://github.com/Lawlietr/Index-Translate-Proxy)`。
+   不假裝瀏覽器：讓上游看得出流量來源，比偽裝誠實。
 3. **一律向上游要串流**（`stream: true`），非串流的客戶端由代理把 SSE 組回單一 `chat.completion`。
    理由：非串流超過 10.0s 會被 504 砍。回應加 `x-proxy-upstream-stream: forced`，讓這件事在 devtools 可見。
    跨塊的拼接要插入原分隔字元的 delta；`usage` 上游缺就不帶，不造假數字（細節見 `design/streaming-and-chunking.md`）。
 4. **超長輸入只在行界切塊**，依序送、**按原本的分隔字元接回**。不得切在行內——插件靠編號行把譯文對應回原文，
    行內切會錯位；只有單行本身超長時才硬切，該處分隔用空字串。代理不重編、不刪編號。
-   中途某塊失敗時 v1 不補償：整個請求失敗、沿用那塊的 status（語義與理由見 `design/streaming-and-chunking.md`）。
+   **上限在輸出側**（預設 2,048 completion tokens），所以切塊大小要按「估計輸出 tokens」算，不是只看輸入字元
+   （`design/streaming-and-chunking.md` §1）。**必須檢查 `finish_reason === "length"`**：那是尾部被截掉的唯一訊號，
+   出現了就不是正常完成（除非 `max_tokens` 是客戶端自己要的）。
+   中途某塊失敗時 v1 不補償：整個請求失敗、沿用那塊的 status（語義與理由見同檔 §3）。
 5. **路徑：**接受 `/v1/*`（插件形狀，自訂地址以 `/v1` 結尾）與 `/api/*`（內部另一專案的寫法）；
    **已帶 `/v1` 的路徑絕不再補前綴**（會變成 `/v1/v1/…` → 上游 404）。`/v1/responses` 只透傳、不組包。
    上游沒有的路徑（`/v1/completions`）與其他一切路徑由本代理**本地 404**，不丟給上游白費一次配額。
@@ -70,8 +77,11 @@
    退回 `x-api-key`；設計與錯誤形狀見 `design/auth.md`）。驗證在**任何上游請求之前**完成，
    401 不消耗上游配額；**驗完即丟**——不轉發 `Authorization`、`x-api-key`、`cookie`、CF 的 `x-*` 標頭，
    對上游只帶 `content-type` 與 UA（上游不需鑑權）。
-9. **不注入 prompt 內容**；唯一允許的注入是 `chat_template_kwargs.enable_thinking:false`（上游目前預設已關，
-   但官方文件要求客戶端顯式關閉，換端點時不會漏）。除此之外 prompt 是使用者的輸入，不改。
+9. **不注入 prompt 內容**：不加 system/user 訊息、不改使用者的字。允許的**協定層**注入只有四項，
+   每一項都要在 README 看得到：`stream:true`（規則 3）、`chat_template_kwargs.enable_thinking:false`
+   （官方要求客戶端顯式關閉，換端點不漏）、`stream_options:{include_usage:true}`
+   （上游串流預設不給 `usage`，不補就沒有用量資料）、`max_tokens:4096`（上游預設 2,048 會截尾；
+   **客戶端自己帶 `max_tokens` 就尊重，不覆蓋**）。
 10. **授權邊界：**MIT。上游 `bilibili/Index-Translate` 為 Apache-2.0、姐妹專案 `translate-cloud` 為 AGPL-3.0 →
     **可共用事實、概念與 prompt 結構，不得逐字複製兩者的程式碼**，除非先在授權層面做決定（保留出處聲明 /
     統一授權）。要複用就重寫。

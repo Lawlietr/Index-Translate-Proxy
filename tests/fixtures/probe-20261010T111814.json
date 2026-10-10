@@ -1,0 +1,100 @@
+{
+  "ranAt": "2026-10-10T11:18:14.455Z",
+  "groups": [
+    "cap"
+  ],
+  "rows": [
+    {
+      "group": "cap",
+      "case": "no-max-tokens(6000ch)",
+      "status": 200,
+      "ms": 18994,
+      "firstByteMs": 375,
+      "sse": true,
+      "bytes": 519342,
+      "err": null,
+      "retryAfter": null,
+      "in_lines": 101,
+      "got_lines": 42,
+      "finish": "length",
+      "out_chars": 10302,
+      "completion_tokens": 2048,
+      "prompt_tokens": 3901
+    },
+    {
+      "group": "cap",
+      "case": "max_tokens=40",
+      "status": 200,
+      "ms": 1043,
+      "firstByteMs": 708,
+      "sse": true,
+      "bytes": 11233,
+      "err": null,
+      "retryAfter": null,
+      "finish": "length",
+      "out_chars": 216,
+      "completion_tokens": 40,
+      "got_lines": 1
+    },
+    {
+      "group": "cap",
+      "case": "bisect=2200",
+      "status": 200,
+      "ms": 16129,
+      "firstByteMs": 596,
+      "sse": true,
+      "bytes": 476102,
+      "err": null,
+      "retryAfter": null,
+      "in_lines": 38,
+      "got_lines": 38,
+      "finish": "stop",
+      "completion_tokens": 1878
+    },
+    {
+      "group": "cap",
+      "case": "bisect=2400",
+      "status": 200,
+      "ms": 16743,
+      "firstByteMs": 683,
+      "sse": true,
+      "bytes": 511775,
+      "err": null,
+      "retryAfter": null,
+      "in_lines": 41,
+      "got_lines": 41,
+      "finish": "stop",
+      "completion_tokens": 2019
+    },
+    {
+      "group": "cap",
+      "case": "bisect=2600",
+      "status": 200,
+      "ms": 16277,
+      "firstByteMs": 705,
+      "sse": true,
+      "bytes": 519366,
+      "err": null,
+      "retryAfter": null,
+      "in_lines": 44,
+      "got_lines": 42,
+      "finish": "length",
+      "completion_tokens": 2048
+    },
+    {
+      "group": "cap",
+      "case": "bisect=2800",
+      "status": 200,
+      "ms": 15862,
+      "firstByteMs": 476,
+      "sse": true,
+      "bytes": 519731,
+      "err": null,
+      "retryAfter": null,
+      "in_lines": 48,
+      "got_lines": 41,
+      "finish": "length",
+      "completion_tokens": 2048
+    }
+  ]
+}
