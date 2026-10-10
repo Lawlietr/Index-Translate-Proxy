@@ -56,7 +56,7 @@ Netlify / Deno Deploy / Fastly Compute：**未測**，但它們同樣是「非 C
 
 1. ~~Vercel 最小探測~~ → **已做，通過**（探測碼在 `probes/vercel-egress/`，當時部署為 `itp-egress-probe.vercel.app`；2026-10-10）。
    下一步是**把本代理移到 Vercel**（保留 `src/lib/*` 不動，只換入口與環境變數載入），再用
-   `scripts/probe-live.mjs` 打它 —— 那才會涵蓋切塊、413、401、429 透傳、`finish_reason` 等 19 項。
+   `scripts/probe-live.mjs` 打它 —— 那才會涵蓋切塊、413、401、429 透傳、`finish_reason`、放行清單等 21 項。
 2. 若 1 通：決定 A（把本專案改成 Vercel 版）**或**保留 CF Worker 的協定碼、只把上游換成 Vercel 上的中轉。
    我傾向**整個換到 A**：兩層 serverless 只是多一跳和兩個部署。
 3. 若 1 不通但有常開機器：走 C。

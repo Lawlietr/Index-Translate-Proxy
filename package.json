@@ -13,6 +13,7 @@
     "test": "node --test 'tests/*.test.mjs'",
     "lint:zh": "node scripts/lint-zh.mjs",
     "smoke": "node scripts/smoke-local.mjs",
+    "serve-bridge": "node scripts/serve-vercel-bridge.mjs",
     "probe": "node scripts/probe-upstream.mjs",
     "probe-live": "node scripts/probe-live.mjs",
     "dev:vercel": "vercel dev --listen 8788",

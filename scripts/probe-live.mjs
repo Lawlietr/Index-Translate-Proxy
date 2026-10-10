@@ -140,7 +140,7 @@ async function main() {
     method: "POST",
     body: JSON.stringify({ model: "index-mt-9b-syllable", messages: [{ role: "user", content: "1. hi" }] }),
   })
-  check("-syllable 刻意不放行（會漏行/丢編號）", blockedSyllable.res.status === 400 && /我們測過/.test(blockedSyllable.text), `${blockedSyllable.res.status} ${blockedSyllable.text.slice(0, 100)}`)
+  check("-syllable 刻意不放行（會漏行／丟編號）", blockedSyllable.res.status === 400 && /我們測過/.test(blockedSyllable.text), `${blockedSyllable.res.status} ${blockedSyllable.text.slice(0, 100)}`)
   const noAuth = await call("/v1/chat/completions", {
     method: "POST",
     // 標頭值要 ASCII，所以這把「錯 key」不能用中文

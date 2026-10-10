@@ -10,7 +10,10 @@
    - 一次性資源清掉（**本次的 Vercel token 沒有 `Projects:Read`，列表/刪除都回 403 → 只能在 dashboard 手動做**）：
      Vercel 的 `itp-vercel-probe`／`itp-egress-probe` 兩個探測專案（探測碼已收進 `probes/`，刪專案不會讓證據丟失）、
      CF 的 `itp-ua-probe` 與 `itp-echo`。保留 `itp-egress-probe` 也可以——它是目前唯一「從我們實際出口驗上游通不通」的探測。
-   - **安全性家務**：本次會話用過的 Vercel 帳號 Token 已出現在對話裡，請在 dashboard 撤銷重發；
+   - **阻塞項：Vercel token 已失效**（`invalidToken`／CLI 回「Not authorized」）→ main 上的新版（放行清單、
+     本地 `/v1/models` 清單）**目前無法部署**，線上仍是舊版（`GET /v1/models` 可辨認版本）。
+     需要一組新的帳號 Token（或把 repo 連到 Vercel 的 Git 整合，讓 push 觸發部署）。
+   - **安全性家務**：本次會話用過的 Vercel 帳號 Token 已出現在對話裡（現已失效），請在 dashboard 撤銷重發；
      `ITP_KEY` 目前 CF 與 Vercel 共用同一把，若要分開管理，Vercel 那側在 Settings → Environment Variables 改。
 1. **規則 7 的並發閘在兩個平台都是 per-instance**（2026-10-10 線上實測：Vercel 把 12 個併發分散到 6+ 個實例，
    一個都不擋；CF 多 isolate 同理）。v1 的保護因此主要落在**插件端「每秒最大請求數」3~5**（README 已寫）。
@@ -30,8 +33,9 @@
    已建、已 public ✓；`main` 已開、`[[ratelimits]]` 已有預設值 → 剩下放按鈕 + 手動三行退路。
    **注意**：CF 出口打上游 412（見 `design/egress-options.md`），所以在出口問題解決前，按鈕部署出來的實例**打不到上游**；
    要做的是「Deploy to Vercel」為主、CF 按鈕為附。
-6. **上游其他模型的實際行為**（`index-mt-2b/9b/-syllable` 與 `-preview`）：等線上可用之後再測，
-   測得清楚才考慮放行或做 alias（規則 1 目前一律本地 400）。
+6. ~~上游其他模型的實際行為~~（**已做**）：`index-mt-2b`/`index-mt-9b` 可用且編號行逐行對應 → **已放行**；
+   兩個 `-syllable` 會漏行／丟編號 → 不放行。證據與決定：`design/model-allowlist.md`。
+   仍待測：其他語言方向的行對應與品質（目前只測過 zh→en、8 行）。
 
 ## 已完成（最多五項，新在上）
 - 2026-10-10：**搬到 Vercel 並線上探測** —— `https://index-translate-proxy.vercel.app` 上線（Edge runtime 入口

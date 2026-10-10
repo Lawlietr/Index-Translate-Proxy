@@ -1,16 +1,18 @@
 # AGENTS.md — Index-Translate-Proxy
 
-> **狀態：第一版已實裝，主部署在 Vercel 並已做過線上探測（`probe-live` 19 ok / 0 fail / 1 skip）。**
+> **狀態：已實裝並已上線（Vercel 主入口，`probe-live` 19 ok / 0 fail / 1 skip）。目前線上跑的是那一版；**
+> **放行清單（本檔規則 1 的新版）已在 main，但重新部署需要一組有效的 Vercel token**
+> （舊 token `invalidToken`）。那一版已用 `scripts/serve-vercel-bridge.mjs` 起本地入口跑過 `probe-live` **21 ok / 0 fail**（打真上游）。
 > 一份協定碼、兩個入口：`api/index.js`（Vercel Edge runtime，**現行主入口**）與
 > `src/worker.js`（Cloudflare Worker，保留，但**因出口 412 目前打不到上游**）。
 > `src/lib/` 協定碼不重複、`tests/*.test.mjs`（82 條離線，含入口橋接）、
-> `scripts/{probe-live,probe-sse-timing,smoke-local,probe-upstream,lint-zh}.mjs`。
+> `scripts/{probe-live,probe-sse-timing,smoke-local,probe-upstream,serve-vercel-bridge,lint-zh}.mjs`。
 > 本檔的規則是實作的約束，不是已上線行為的宣傳；線上行為的證據在 `design/egress-options.md` 與
 > `design/upstream-probe-2026-10-10.md`。
 
 ## Project Overview
 
-一個 **Vercel 上的 Edge 函式**（同一份協定碼也有 **Cloudflare Worker** 入口，因出口 412 暫未启用），把 bilibili
+一個 **Vercel 上的 Edge 函式**（同一份協定碼也有 **Cloudflare Worker** 入口，因出口 412 暫未啟用），把 bilibili
 **Index-Translate** 的免費公網 API 以同源端點對外提供，供
 **沉浸式翻譯（Immersive Translate）** 等瀏覽器插件與其他 OpenAI 相容客戶端使用。無 UI、無前端。
 

@@ -21,6 +21,8 @@
 | API Key | `itp-3c3daf945ef7749f27852d074fb875bb`（示範用、共用；可能隨時輪換，穩定使用請自己部署一把） |
 
 線上狀態：`GET https://index-translate-proxy.vercel.app/` 會回一行說明與 `x-proxy-auth`，不用翻控制台。
+若 `index-mt-9b`／`index-mt-2b` 回 400，代表那個部署跑的是舊版（`GET /v1/models` 會列出它實際放行的名字）；
+部署最新的 main 就有三個。
 
 ## 用法二：自己部署（Vercel，約 5 分鐘）
 
@@ -33,7 +35,7 @@ git clone https://github.com/Lawlietr/Index-Translate-Proxy.git && cd Index-Tran
 # 1. Vercel → Import 這個 repo（Framework 選 Other；沒有構建步驟）
 # 2. Settings → Environment Variables → Production：ITP_KEY = 自己產生（openssl rand -hex 32）
 # 3. 部署，然後验证：
-node scripts/probe-live.mjs https://<你的專案>.vercel.app
+node scripts/probe-live.mjs https://<你的專案>.vercel.app   # 21 項協定檢查（規則 13）
 node scripts/probe-sse-timing.mjs https://<你的專案>.vercel.app
 ```
 
@@ -110,6 +112,8 @@ curl -s -w "\nHTTP %{http_code}\n" -X POST "$B/v1/chat/completions" -H "content-
 npm run dev       # 本地 miniflare（讀 .dev.vars），打真上游；http://127.0.0.1:8787
 npm test          # 82 條離線測試（注入假的 fetch，不碰網路）
 npm run smoke     # 51 項端到端冒煙（程序內跑 worker）
+npm run serve-bridge  # 用 Node 起 Vercel 入口（不需登入，打真上游）→ 再對 http://127.0.0.1:8788 跑 probe-live
+npm run dev:vercel    # 用 Vercel CLI 跑本地（需要 `vercel login`）
 npm run lint:zh   # 規則 11：註解與使用者文字一律繁體
 node scripts/probe-upstream.mjs --quick   # 上游行為重測，結果存 tests/fixtures/
 ```
