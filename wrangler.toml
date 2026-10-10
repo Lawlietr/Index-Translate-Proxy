@@ -4,12 +4,14 @@ name = "index-translate-proxy"
 compatibility_date = "2026-10-01"
 
 # 骨架階段：入口還沒建立，所以這行先註解掉，不假裝能部署。
-# 建立 src/worker.js 時把它打開（AGENTS.md 待辦 1）。
+# 建立 src/worker.js 時把它打開（TODO.md 待做 3；「Deploy to Cloudflare」按鈕也要它，見 design/deploy-button.md）。
 # main = "src/worker.js"
 
 # 執行期可調的閾值（皆為字串，Worker 內會轉數字並套預設值）。
-# MAX_INPUT_CHARS：超過就切塊。35B 在約 4000 字元輸入會截斷，1500 安全（既有內部實測，待重測）。
-# MAX_INFLIGHT：單 isolate 同時進上游的請求數；插件端也該設「每秒最大請求數 3~5」。
+# MAX_INPUT_CHARS：超過就切塊。暫定 1500 = 保守值，依據只有未重測的舊紀錄；
+#   階梯重測後才調整（TODO.md 待做 1、design/streaming-and-chunking.md）。
+# MAX_INFLIGHT：單 isolate 同時進上游的**塊**數（一個拆三塊的請求佔三個額度，規則 7）。
+#   插件端也該設「每秒最大請求數 3~5」。
 [vars]
-MAX_INPUT_CHARS = "3500"
+MAX_INPUT_CHARS = "1500"
 MAX_INFLIGHT = "4"

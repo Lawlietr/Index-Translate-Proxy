@@ -1,7 +1,7 @@
 # AGENTS.md — Index-Translate-Proxy
 
 > **狀態：骨架。** 只有 `package.json`、`wrangler.toml`、`.gitignore`、`LICENSE`、`README.md`、`TODO.md`、
-> `design/`（兩份設計檔）與本檔。`src/` 與測試**尚未建立**，因此 `npm run dev`／`npm run deploy`／CI 都還不存在。
+> `design/`（三份設計檔）與本檔。`src/` 與測試**尚未建立**，因此 `npm run dev`／`npm run deploy`／CI 都還不存在。
 > 本檔的規則是實作時的約束，不是已實裝的行為描述。
 
 ## Project Overview
@@ -43,20 +43,29 @@
 1. **不換模型、不降級、不重試別個模型。** 上游對未知模型回 **400**（見上表），就照實回，附一句「只有
    `Index-Translate-35B-A3B` 由 `/v1/models` 宣告，請改用它」。靜默降級會讓使用者以為自己選的模型真的跑過。
    風險來自上游自己就會靜默：`model:""` 直接跑 35B-A3B，`-preview` 這類名字回 200 但不保證跑的是那個。
+   **本代理只放行 `Index-Translate-35B-A3B`**：上游 400 自報的其他模型（`index-mt-2b/9b/-syllable`）也一律
+   **本地 400**，不做 alias、不做試探——要放行得先自己測過（`TODO.md` 待做 10）。
 2. **UA 由本代理固定為一個自己挑的 UA，不轉發客戶端 UA。** 這是本代理存在的主因（見上表：機器人 UA 會 412）。
    字面值尚未定——上游並不要求瀏覽器樣式（官方自己的 `Index-Translate-Client/1.0` 也回 200），改成可識別的
    自訂 UA 比較誠實；決定要做的補測列在 `TODO.md` 待做 1。
 3. **一律向上游要串流**（`stream: true`），非串流的客戶端由代理把 SSE 組回單一 `chat.completion`。
    理由：非串流超過 10.0s 會被 504 砍。回應加 `x-proxy-upstream-stream: forced`，讓這件事在 devtools 可見。
+   跨塊的拼接要插入原分隔字元的 delta；`usage` 上游缺就不帶，不造假數字（細節見 `design/streaming-and-chunking.md`）。
 4. **超長輸入只在行界切塊**，依序送、**按原本的分隔字元接回**。不得切在行內——插件靠編號行把譯文對應回原文，
-   行內切會錯位；只有單行本身超長時才硬切，該處分隔用空字串。
+   行內切會錯位；只有單行本身超長時才硬切，該處分隔用空字串。代理不重編、不刪編號。
+   中途某塊失敗時 v1 不補償：整個請求失敗、沿用那塊的 status（語義與理由見 `design/streaming-and-chunking.md`）。
 5. **路徑：**接受 `/v1/*`（插件形狀，自訂地址以 `/v1` 結尾）與 `/api/*`（內部另一專案的寫法）；
    **已帶 `/v1` 的路徑絕不再補前綴**（會變成 `/v1/v1/…` → 上游 404）。`/v1/responses` 只透傳、不組包。
    上游沒有的路徑（`/v1/completions`）與其他一切路徑由本代理**本地 404**，不丟給上游白費一次配額。
-6. **上游錯誤不改 status、不改 body**，只在同一回應裡加 `hint`（我們的建議）。不包層、不重寫成 500。
+   唯一例外是 `GET /`：回一行文字說明這是 API、地址要填 `…/v1`，並用 `x-proxy-auth: configured|missing`
+   讓部署者一眼看出自己有沒有設 key（不碰上游，不算「健康檢查」）。
+6. **上游錯誤不改 status、不改 body**，只在同一回應加 **`x-proxy-hint` 標頭**（我們的建議）。不包層、不重寫成 500、
+   不在上游的 JSON 裡塞欄位。要讓**使用者**看到的話就放進我們自己產生錯誤的 `error.message`（OpenAI 客戶端會顯示），
+   header 只給 devtools 用——插件不會讀 body 裡的自訂欄位。
 7. **並發有上限**（預設 4，`MAX_INFLIGHT` 可調），超過回 **429 + `Retry-After: 2`**，並建議把插件的
-   「每秒最大請求數」設 3~5。上游的配額是**按 IP** 的（見上表「配額」列），而 Worker 的 egress IP 是共用池
-   → 保護只能自己做；上游回的 429 與 `retry-after` 要原樣透傳（規則 6）。
+   「每秒最大請求數」設 3~5。閘門計的是**上游塊**，不是客戶端請求（一個拆三塊的請求佔三個額度）。
+   上游的配額是**按 IP** 的（見上表「配額」列），而 Worker 的 egress IP 是共用池 → 保護只能自己做；
+   上游回的 429 與 `retry-after` 要原樣透傳（規則 6）。
 8. **先鑑權，再轉發；key 不進上游。** worker 必須先驗證**共用的 `ITP_KEY`**（讀 `Authorization: Bearer`，
    退回 `x-api-key`；設計與錯誤形狀見 `design/auth.md`）。驗證在**任何上游請求之前**完成，
    401 不消耗上游配額；**驗完即丟**——不轉發 `Authorization`、`x-api-key`、`cookie`、CF 的 `x-*` 標頭，
@@ -71,7 +80,8 @@
     但**先有程式碼才建 CI**——骨架階段加 CI 是假工。
 13. **部署是測試環的一環：**`wrangler deploy` 之後必須用**真的 worker** 跑一次探測，至少覆蓋
     插件的 `/v1` 路徑形狀、UA（腳本 UA 打 worker 不該 412）、未知模型的 400、超長段的切塊接回、
-    **未帶 key 的 401 形狀**、上游 429 的 `retry-after` 是否原樣送出。
+    **拆塊請求中途失敗時的 status 與 `x-proxy-chunk-failed`**、**`GET /` 的一行回應與 `x-proxy-auth`**、
+    未帶 key 的 401 形狀、上游 429 的 `retry-after` 是否原樣送出。
     「本機跑過」在這種上傳產物／edge 部署的情境裡不代表線上。
 14. **文件分工：**`TODO.md` 只放待做項目與最多五項已完成（置底）；設計、實測紀錄、規格拆解一律放
     `design/`；更早的完成紀錄查 `git log --oneline`。同一件事的真相只能有一處——`AGENTS.md` 寫結論，
