@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 上游公網端點探測（TODO.md 待做 1）。這不是規則 13 的「部署後探測 worker」，那個是 scripts/probe-live.mjs（待做 7）。
+// 上游公網端點探測（跑法與優先度見 TODO.md「補測」）。這不是規則 13 的「部署後探測」，那個是 scripts/probe-live.mjs。
 //
 // 用法：
 //   node scripts/probe-upstream.mjs                 # 預設群組
