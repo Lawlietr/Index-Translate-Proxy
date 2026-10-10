@@ -176,5 +176,3 @@ There is a single copy of the protocol code (`src/lib/`); the entry points are o
 
 MIT (see [`LICENSE`](LICENSE)). The upstream [bilibili/Index-Translate](https://github.com/bilibili/Index-Translate)
 is Apache-2.0 — only its facts, model names and prompt structure are referenced here, **its code was not copied verbatim**.
-
-Development happens mainly in a self-hosted Forgejo; GitHub is a public mirror — please open issues/PRs in the primary repository.

@@ -170,5 +170,3 @@ npm run lint:readme # 兩份 README 的結構對等檢查（改一份要同步�
 
 MIT（見 [`LICENSE`](LICENSE)）。上游 [bilibili/Index-Translate](https://github.com/bilibili/Index-Translate)
 為 Apache-2.0——只引用其事實、模型名稱與 prompt 結構，**沒有逐字複製其程式碼**。
-
-主要開發在自建 Forgejo，GitHub 是公開鏡像；issue／PR 請到主 repo。
