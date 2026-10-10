@@ -82,6 +82,19 @@ test("規則 8／定案：key 用 ITP_KEY；缺 key、錯 key 都 401，且不�
   assert.equal(calls.length, 0, "401 不該打上游")
 })
 
+test("ITP_KEY 兩邊都 trim：貼進環境變數時多出的空白/換行不該一直 401", async () => {
+  echoUpstream()
+  const padded = { ...ENV, ITP_KEY: "  test-key\n" } // 部署端多空白
+  const r = await worker.fetch(req("/v1/chat/completions", post(chatBody("你好"), AUTH)), padded)
+  assert.equal(r.status, 200, "客戶端帶的是 test-key，比對要能過")
+  // 反向：客戶端多空白（某些插件會這樣帶）也要能過
+  const r2 = await call("/v1/chat/completions", post(chatBody("你好"), { authorization: "Bearer   test-key  " }), ENV)
+  assert.equal(r2.status, 200)
+  // 只有空白＝沒設
+  const blank = await worker.fetch(req("/v1/chat/completions", post(chatBody("hi"), AUTH)), { ...ENV, ITP_KEY: "   " })
+  assert.equal(blank.status, 503, "全空白視為未設定")
+})
+
 test("未設 ITP_KEY → 503（不是變公開），而且根路徑看得見原因", async () => {
   echoUpstream()
   const r = await worker.fetch(req("/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(chatBody("hi")) }), {})

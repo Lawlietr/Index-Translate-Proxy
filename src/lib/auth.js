@@ -82,7 +82,8 @@ export async function checkAuth(request, env) {
     }
   }
 
-  const expected = await sha256Hex(env.ITP_KEY)
+  // 部署端與客戶端兩邊都 trim：貼进 Vercel 時多出來的空白/換行不該讓人一直 401。
+  const expected = await sha256Hex(String(env.ITP_KEY).trim())
   const actual = await sha256Hex(provided)
   if (!constantTimeEqual(expected, actual)) {
     return {
