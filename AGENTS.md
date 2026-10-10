@@ -1,15 +1,9 @@
 # AGENTS.md — Index-Translate-Proxy
 
-> **狀態：已實裝並已上線。那是**我自己用的部署**（`https://index-translate-proxy.vercel.app`，不是公共實例、
-> 不對外發 key）；線上探測 `probe-live` 21 ok / 0 fail / 1 skip**
+> **狀態：已實裝並已上線。** 已部署的那份是**我自己用的**（`https://index-translate-proxy.vercel.app`）——
+> 不是公共實例，也不對外發 key（定位見「刻意不做」）。線上探測 `probe-live` **21 ok / 0 fail / 1 skip**
 > （跳過的是 per-instance 併發閘，平台上不可測），`probe-sse-timing` 兩側真增量。放行清單（規則 1）也已線上驗證
 > （含「`index-mt-9b` 經本代理真的能翻」與「`-syllable` 被擋」兩項）。
-> 一份協定碼、兩個入口：`api/index.js`（Vercel Edge runtime，**現行主入口**）與
-> `src/worker.js`（Cloudflare Worker，保留，但**因出口 412 目前打不到上游**）。
-> `src/lib/` 協定碼不重複、`tests/*.test.mjs`（81 條離線，含入口橋接）、
-> `scripts/{probe-live,probe-sse-timing,smoke-local,probe-upstream,serve-vercel-bridge,lint-zh}.mjs`。
-> 本檔的規則是實作的約束，不是已上線行為的宣傳；線上行為的證據在 `design/egress-options.md` 與
-> `design/upstream-probe-2026-10-10.md`。
 
 ## Project Overview
 
