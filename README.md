@@ -3,9 +3,7 @@
 一個 **Cloudflare Worker**：把 bilibili **Index-Translate** 的免費公網 API
 （`https://index-translate.bilibili.com/v1`）以**同源端點**的形式提供出去，讓瀏覽器插件
 （**沉浸式翻譯 Immersive Translate** 的「OpenAI 翻譯服務 + 自訂接口地址」）與其他 OpenAI 相容
-客戶端可以直接使用 35B 翻譯模型。
-
-姐妹專案：`translate-cloud`（網頁前端）、`translate`（WebGPU 離線版）。這個 repo 只做代理，不做 UI。
+客戶端可以直接使用 35B 翻譯模型。本 repo 只做代理，不做 UI。
 
 > ## 狀態：骨架（尚未實作）
 >
@@ -47,7 +45,7 @@
 
 1. 若將來**逐字複製**上游程式碼（例如 `call_api.py` 的片段或 prompt 模板原文），該部分仍受 Apache-2.0
    約束 → 必須保留出處註解。
-2. 若將來**逐字複製姐妹專案 `translate-cloud` 的程式碼**，那些程式碼是 **AGPL-3.0**，會讓這個 MIT 專案
+2. 若將來**逐字複製其他內部專案的程式碼**（尚未公開發布，且採 **AGPL-3.0**），會讓這個 MIT 專案
    內含 copyleft 片段。因此規則是：**事實、概念、prompt 結構可共用；逐字複製程式碼要先到授權層面做決定**
    （要嘛只在這個 repo 重寫，要嘛統一授權）。
 
@@ -59,4 +57,6 @@
 - [bilibili/Index-Translate — 沉浸式翻译配置教程](https://github.com/bilibili/Index-Translate/blob/main/docs/immersive_translate_zh.md)
 - [inference/llm/README_zh.md — 「CORS / WAF / CoT，請用本地代理」那段](https://github.com/bilibili/Index-Translate/blob/main/inference/llm/README_zh.md)
 - [沉浸式翻譯 — OpenAI 自訂接口地址用法](https://immersivetranslate.com/en/docs/services/ai/)／[自訂 API 協定](https://immersivetranslate.com/en/docs/services/custom/)
-- 姐妹專案：[`translate-cloud`](http://192.168.1.124:3000/lawliet/INDEX-TRANSLATE)（上游行為的實測紀錄在它 repo 內）
+
+上游行為的實測紀錄都放在本 repo（`AGENTS.md` 的事實表與 `design/` 的探測紀錄）；其他內部專案尚未公開，
+不在這裡引用。

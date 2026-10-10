@@ -28,12 +28,13 @@
 | 多送的欄位 | `n`、`stop`、`presence_penalty`、`frequency_penalty`、`seed`、`user` 與 `Authorization: Bearer <任意字串>` 均可被上游接受（200）→ 純轉發可行 |
 | 編號批次 | 三行一次送（`1. …\n2. …\n3. …`）→ 上游保留編號 → 插件的行對應協定可用 |
 | 逾時 | 非串流且輸出超過 **10.0s** → 上游回 **HTTP 504**；SSE 端到端緩衝（TTFT ≈ 總時間） |
-| 長度 | 35B 輸入約 **4000 字元**會截斷，**1500** 安全（姐妹專案 `design/model-selector.md`） |
+| 長度 | 35B 輸入約 **4000 字元**會截斷，**1500** 安全（未公開的姐妹專案 `design/model-selector.md`；本 repo 待做 1 自行重測） |
 | 可達性 | `index-translate.bilibili.com` CNAME → `bilicdn1.com`（海外節點 `103.151.151.x`，`x-cache-webcdn: BYPASS`）→ 不是只在中國大陸可達；但**從 CF edge 的實際延遲未測** |
 | 配額 | 無公開配額、無 SLA、免費、不需金鑰；bilibili 會撤回模型名稱（`index-homura-*` 先例） |
 
-模型可用性的三層證據（declared / 被網關接受但未宣告 / 已撤回）在姐妹專案
-`translate-cloud/design/model-selector.md`；這個 repo 只引用，不重複寫。
+模型可用性的三層證據（declared / 被網關接受但未宣告 / 已撤回）在未公開的姐妹專案
+`translate-cloud/design/model-selector.md`；那個 repo **尚未公開發布，不得在 README 或任何對外文件引用其
+名稱與內網 URL**。這個 repo 只引用其結論，並靠 `TODO.md` 待做 1 重測留證據。
 
 ## Non-negotiable rules
 
@@ -70,6 +71,10 @@
 14. **文件分工：**`TODO.md` 只放待做項目與最多五項已完成（置底）；設計、實測紀錄、規格拆解一律放
     `design/`；更早的完成紀錄查 `git log --oneline`。同一件事的真相只能有一處——`AGENTS.md` 寫結論，
     證據與細節放 `design/`，`TODO.md` 只寫「要做什麼」。
+15. **對外文件不提未公開的專案：**姐妹專案仍在開發、短時間不會公開 → `README.md`（還有未來網站／說明檔）
+    **不出現其名稱與內網 URL**（`192.168.x.x` 那種連結對外一定是碎的）。`AGENTS.md`、`design/` 這些 contributor
+    文件可以提，但首次提到要標「未公開」，而且**引用過的事實要在本 repo 留下自己的實測證據**，
+    不然是無法查證的引用。
 
 ## 待辦
 
@@ -79,4 +84,4 @@
 
 - KV / Cache 快取（免費層寫入配額低，翻譯請求重複率低）。
 - DeepL／其他協定的適配層——只做 OpenAI 相容這一條。
-- 上游健康檢查或模型探測（`/v1/models` 查不出未宣告模型的可用性，白花一次請求；見姐妹專案規則 12）。
+- 上游健康檢查或模型探測（`/v1/models` 查不出未宣告模型的可用性，白花一次請求；姐妹專案規則 12 同一結論）。

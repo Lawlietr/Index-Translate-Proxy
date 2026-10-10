@@ -14,6 +14,8 @@
    - UA 不必假裝瀏覽器：官方自己用 `Index-Translate-Client/1.0` → 200（規則 2 建議改成可識別的自訂 UA）。
    - **規則 9 的理由要改寫**：公網端點預設已等同 `enable_thinking=false`（不帶參數與明確 false 的輸出完全相同），
      三種模式都不吐 `<think>`；開思考的實際風險是**生成變長→撞 10s 504**與摻入非譯文文字，不是標籤泄漏。
+   - **重測長度上限**：「4000 字元截斷、1500 安全」引自未公開的姐妹專案，對外無法查證 → 本 repo 自己跑一次
+     阶梯式長度（500/1000/2000/4000 字元）留證據，再把 `MAX_INPUT_CHARS` 的預設值定下來。
 2. **把實測落成 `design/upstream-probe-2026-10-10.md`**：附請求形狀、狀態碼、時間、回應片段與日期；`AGENTS.md` 只留結論與引用連結（避免兩處真相）。
 3. **`design/quotas-and-chunking.md`**：60k TPM/IP 對 CF egress 共用 IP 的影響、切塊預算（1500 字元 ≈ ~1.1k tokens → 全 worker 約 50 塊/分鐘）、`MAX_INFLIGHT` 與 429/`retry-after` 的透傳策略。
 4. `src/worker.js` + `src/lib/{route,headers,stream,limits}.js`（規則 2–6；規則 5 需放行 `/v1/responses` 純透傳）。
@@ -23,7 +25,7 @@
 6. `tests/*.test.mjs`：`node --test` 打真實模組、注入假的 `fetch`，離線覆蓋規則 1–7 與鑑權（含 401/429 透傳與 `<think>` 防禦性剥离）。
 7. `scripts/probe-live.mjs`（規則 13），新增探測：**未帶 key → 401 形狀**、**從 CF egress 打到的 429 形狀與 `retry-after`**、
    同一 worker 兩次請求是否被計入同一 IP 配額、`/v1/responses` 透傳。
-8. `.forgejo/workflows/ci.yml`（跑離線測試；label 與 image 沿用姐妹專案的 `mt`）。
+8. `.forgejo/workflows/ci.yml`（跑離線測試；runner 的 label 與 image 用 `mt`，自有環境既有值）。
 9. 部署並把實際 worker 網域補進 `README.md`；README 增加「官方本機橋（`call_api.py --serve` / `run_proxy_windows.bat`）vs 本 worker」的對比章節，
    並把「API Key｜任填」改成「填本代理的 key」（[`design/auth.md`](design/auth.md)）。
 10. **Deploy to Cloudflare 按鈕**（[`design/deploy-button.md`](design/deploy-button.md)）：鏡像已定 `git@github.com:Lawlietr/Index-Translate-Proxy.git`（自建 Forgejo 不支援按鈕），
