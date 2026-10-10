@@ -5,7 +5,7 @@
 > （含「`index-mt-9b` 經本代理真的能翻」與「`-syllable` 被擋」兩項）。
 > 一份協定碼、兩個入口：`api/index.js`（Vercel Edge runtime，**現行主入口**）與
 > `src/worker.js`（Cloudflare Worker，保留，但**因出口 412 目前打不到上游**）。
-> `src/lib/` 協定碼不重複、`tests/*.test.mjs`（82 條離線，含入口橋接）、
+> `src/lib/` 協定碼不重複、`tests/*.test.mjs`（81 條離線，含入口橋接）、
 > `scripts/{probe-live,probe-sse-timing,smoke-local,probe-upstream,serve-vercel-bridge,lint-zh}.mjs`。
 > 本檔的規則是實作的約束，不是已上線行為的宣傳；線上行為的證據在 `design/egress-options.md` 與
 > `design/upstream-probe-2026-10-10.md`。
