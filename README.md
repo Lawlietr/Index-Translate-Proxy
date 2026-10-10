@@ -63,7 +63,7 @@ node scripts/probe-sse-timing.mjs https://<你的專案>.vercel.app  # 確認串
 `npx wrangler secret put ITP_KEY && npx wrangler deploy`。
 
 **一键部署按鈕**（Vercel 與 CF 兩個按鈕的參數定案）在 [`design/deploy-button.md`](design/deploy-button.md)；
-本 repo 還沒有 `deploy/`，所以在徽章上線前请用上面的步驟。
+本 repo 還沒有 `deploy/`，所以在徽章上線前請用上面的步驟。
 
 ## 插件要怎麼填
 
@@ -190,7 +190,7 @@ node scripts/probe-upstream.mjs --quick     # 打上游，結果存 tests/fixtur
 - 上游是**免費公網端點**：無 SLA、有 **60,000 tokens/min per IP** 的軟配額（超出回 429 + `retry-after`），
   而 **Vercel/CF 的出口 IP 是共用池** → 那個額度不是我們獨佔的。上游也**會撤回模型名稱**（`index-homura-*` 先例）。
 - **並發閘是 per-instance**（兩個平台都一樣，已線上實測）→ 真正的保護是插件端的「每秒最大請求數 3~5」。
-- **从 Cloudflare 出口打不到上游**（412，全站）；從 Vercel 出口可以。原因與可行出口見 `design/egress-options.md`。
+- **從 Cloudflare 出口打不到上游**（412，全站）；從 Vercel 出口可以。原因與可行出口見 `design/egress-options.md`。
 - 輸出側截斷：上游預設 2,048 tokens。本代理會補到 4,096，但那只是把問題往後推，不是解決。
   切塊因此是按**估計輸出 tokens**算，不是只看輸入字元。
 - 上游偶爾回 `choices: []` 的 200（探測 5/5 重現）→ 本代理**不重試**（規則 6 的代價）。

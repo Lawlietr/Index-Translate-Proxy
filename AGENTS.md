@@ -93,7 +93,7 @@
    保護只能自己做；上游回的 429 與 `retry-after` 要原樣透傳（規則 6）。细节在 `design/streaming-and-chunking.md` §2。
    **但這個閘在兩個平台都是 per-instance**（2026-10-10 線上實測：Vercel 把 12 個併發分散到 6+ 個實例，一個都不擋；
    線上探測因此對這一項只驗證 429 的**形狀**，不宣稱全域保護）。真的全域閘需 Durable Objects（CF）或外部計數
-   （Vercel，付費）→ v1 不做了，所以**規則 7 是尽力而為的保護，主要防线仍是插件端的並發設定**。
+   （Vercel，付費）→ v1 不做了，所以**規則 7 是盡力而為的保護，主要防線仍是插件端的並發設定**。
 8. **先鑑權，再轉發；key 不進上游。** worker 必須先驗證**共用的 `ITP_KEY`**（讀 `Authorization: Bearer`，
    退回 `x-api-key`；設計與錯誤形狀見 `design/auth.md`）。驗證在**任何上游請求之前**完成，
    401 不消耗上游配額；**驗完即丟**——不轉發 `Authorization`、`x-api-key`、`cookie`、CF 的 `x-*` 標頭，
@@ -109,7 +109,7 @@
 11. **所有使用者可見文字與程式註解一律繁體中文**（與姐妹專案規則 15 相同）。上游的簡體模板原文照引時標注出處。
 12. **CI 放 `.forgejo/workflows/`，不放 `.github/workflows/`**（`origin` 是自建 Forgejo 15.0.9）。
     程式碼已在，所以 CI 是該補的一項（見 TODO）；但在它之前，**部署與線上探測優先**。
-13. **部署是測試環的一環：**部署後必須用**真的線上入口**跑一次探測（`node scripts/probe-live.mjs <base>`；主入口现为
+13. **部署是測試環的一環：**部署後必須用**真的線上入口**跑一次探測（`node scripts/probe-live.mjs <base>`；主入口現為
     Vercel，CF 那側也要跑一次以記錄出口狀態），至少覆蓋
     插件的 `/v1` 路徑形狀、UA（腳本 UA 打 worker 不該 412）、未知模型的 400、超長段的切塊接回、
     **拆塊請求中途失敗時的 status 與 `x-proxy-chunk-failed`**、**`GET /` 的一行回應與 `x-proxy-auth`**、
