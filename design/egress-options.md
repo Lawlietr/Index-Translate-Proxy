@@ -16,7 +16,7 @@
 
 ## 1. 選項與成本
 
-### A. Vercel（函式即代理，整個出口換掉）— **已實測可用，目前唯一验证過的可行出口**
+### A. Vercel（函式即代理，整個出口換掉）— **已實測可用，目前唯一驗證過的可行出口**
 - **已測（2026-10-10，§10）**：從 `iad1` 函式打上游 → `GET /v1/models` **200 ×4**（`server: uvicorn`、
   `x-cache-webcdn: BYPASS from blzone01/02`、無 `cf-ray`）；`POST /v1/chat/completions`（`stream:true`）
   **200 ×3**，SSE **真增量**（6–7 塊）。出口 IP `54.172.44.226`，連續請求**不輪換**。

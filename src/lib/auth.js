@@ -29,7 +29,7 @@ export function readClientKey(request) {
   return null
 }
 
-/** 根路徑用：只讲「部署者有沒有設 key」，不碰上游、不算健康檢查。 */
+/** 根路徑用：只講「部署者有沒有設 key」，不碰上游、不算健康檢查。 */
 export function authConfigured(env) {
   return Boolean(env && typeof env.ITP_KEY === "string" && env.ITP_KEY.trim())
 }

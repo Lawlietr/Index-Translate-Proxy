@@ -29,7 +29,7 @@
 3. `design/quotas-and-chunking.md`：60k TPM/IP 對共用出口 IP 的影響與預算。可用起點（2026-10-10 實測）：
    一個 2,400 字元的塊 ≈ 1,584 prompt + 2,019 completion ≈ **3.6k tokens** → 60k/min 約 **16 塊/分鐘 per IP**，
    而 Vercel/CF 的 egress IP 都是共用池 → 這個額度不是我們獨佔的。另寫 `MAX_INFLIGHT` 與上游 429／`retry-after` 的透傳策略。
-4. `.forgejo/workflows/ci.yml`（跑離線測試與 `npm run lint:zh`；runner 的 label 與 image 用 `mt`，自有環境既有值）。
+4. `.forgejo/workflows/ci.yml`（跑 `npm test`、`npm run lint:zh`、`npm run lint:readme`、`npm run smoke`；runner 的 label 與 image 用 `mt`，自有環境既有值）。
    CI 現在也能順跑 `node scripts/probe-live.mjs <Vercel URL>`——線上探測已有可重複的腳本。
 5. **Deploy to Cloudflare 按鈕**（[`design/deploy-button.md`](design/deploy-button.md)）：鏡像 `github.com/Lawlietr/Index-Translate-Proxy`
    已建、已 public ✓；`main` 已開、`[[ratelimits]]` 已有預設值 → 剩下放按鈕 + 手動三行退路。

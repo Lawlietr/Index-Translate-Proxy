@@ -1,8 +1,17 @@
-# Index-Translate-Proxy
+<h1 align="center">Index-Translate-Proxy</h1>
 
-把 bilibili **Index-Translate**（免費的翻譯模型，OpenAI 相容 API）接成一個 OpenAI 相容端點，
-貼進瀏覽器插件或其他 client 就能用。它是個薄代理：不改 prompt、不換模型、不快取，
-只做「能被插件用上」需要的那幾件事——固定 UA、路徑正規化、強制串流、必要的切塊，外加一把通行碼。
+<p align="center">
+  <a href="README.md"><img src="https://img.shields.io/badge/%F0%9F%87%B9%F0%9F%87%BC_%E7%B9%81%E9%AB%94%E4%B8%AD%E6%96%87-2ea44f?style=for-the-badge" alt="🇹🇼 繁體中文"></a>
+  <a href="README.en.md"><img src="https://img.shields.io/badge/%F0%9F%87%AC%F0%9F%87%A7_English-555555?style=for-the-badge" alt="🇬🇧 English"></a>
+</p>
+
+<p align="center"><b>(◕ᴗ◕)</b> <sub>這份 README 有兩個語言版本，內容 100% 對等——改一份會同步另一份</sub></p>
+
+<p align="center">
+  把 bilibili <b>Index-Translate</b>（免費的翻譯模型，OpenAI 相容 API）接成一個 OpenAI 相容端點，貼進瀏覽器插件或其他 client 就能用。<br>
+  這是一個薄代理：不改 prompt、不換模型、不快取。<br>
+  只做能被插件用上需要的那幾件事：固定 UA、路徑正規化、強制串流、行界切塊，外加一把自己的通行碼。
+</p>
 
 部署在自己的 Vercel 專案上：免費、不需 GPU、不需上游的帳號，五分鐘跑起來。
 
@@ -12,7 +21,7 @@
 - **任何 OpenAI 相容 client**：`curl`、OpenAI SDK、LangChain 之類的工具，填 base URL 就能用。
 - **自己的翻譯後端**：給自家 app／腳本一個不用 GPU、不用付費的翻譯出口。
 
-為什麼中間需要一個代理、它不解決什麼：[`design/why-proxy.md`](design/why-proxy.md)。
+為什麼中間需要一個代理、它不解決什麼：[`design/why-proxy.md`](design/why-proxy.md)（`design/` 這些內部文件目前只有中文）。
 
 ## 部署（Vercel，五分鐘）
 
@@ -74,7 +83,7 @@ curl -s -w "\nHTTP %{http_code}\n" -X POST "$B/v1/chat/completions" -H "content-
 ```
 
 `Authorization: Bearer` 與 `x-api-key` 都接受。開 `https://<你的專案>.vercel.app/` 會回一行說明，
-並在 `x-proxy-auth` 告诉你部署端有沒有設好 key——除錯時不用翻控制台。
+並在 `x-proxy-auth` 告訴你部署端有沒有設好 key——除錯時不用翻控制台。
 
 ## 設定
 
@@ -134,16 +143,17 @@ curl -s -w "\nHTTP %{http_code}\n" -X POST "$B/v1/chat/completions" -H "content-
 
 ```bash
 npm run dev       # 本地 miniflare（讀 .dev.vars），打真上游；http://127.0.0.1:8787
-npm test          # 81 條離線測試（注入假的 fetch，不碰網路）
+npm test          # 82 條離線測試（注入假的 fetch，不碰網路）
 npm run smoke     # 51 項端到端冒煙（程序內跑 worker）
 npm run serve-bridge  # 用 Node 起 Vercel 入口（不需登入，打真上游）→ 再對 http://127.0.0.1:8788 跑 probe-live
 npm run dev:vercel    # 用 Vercel CLI 跑本地（需要 `vercel login`）
 npm run lint:zh   # 註解與使用者文字一律繁體（規則 11）
 node scripts/probe-upstream.mjs --quick   # 上游行為重測，結果存 tests/fixtures/
+npm run lint:readme # 兩份 README 的結構對等檢查（改一份要同步另一份）
 ```
 
 協定碼只有一份（`src/lib/`），入口只做平台橋：`api/index.js`（Vercel，主）、`src/worker.js`（CF，保留）。
-設計、實測紀錄與定案在 [`design/`](design/)；不可妥協的規則在 [`AGENTS.md`](AGENTS.md)；待辦在 [`TODO.md`](TODO.md)。
+設計、實測紀錄與定案在 [`design/`](design/)；不可妥協的規則在 [`AGENTS.md`](AGENTS.md)；待辦在 [`TODO.md`](TODO.md)（這三個都是內部文件，只有中文）。
 上游的事實（UA 黑名單、配額、輸出上限…）都是**自己重測過的**，跑法：`node scripts/probe-upstream.mjs`。
 
 </details>

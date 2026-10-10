@@ -21,7 +21,7 @@ test("不超上限就一塊都不切", () => {
   assert.equal(p.chunks[0].join, "")
 })
 
-test("各种尺寸／上限：按 join 拼回 = 原文，逐字不損", () => {
+test("各種尺寸／上限：按 join 拼回 = 原文，逐字不損", () => {
   const samples = [
     lines(10, 40),
     lines(60, 40),
