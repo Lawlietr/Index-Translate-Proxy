@@ -3,7 +3,7 @@
 import { test, beforeEach, after } from "node:test"
 import assert from "node:assert/strict"
 import worker from "../src/worker.js"
-import { ALLOWED_MODEL } from "../src/lib/model.js"
+import { ALLOWED_MODEL, ALLOWED_MODELS } from "../src/lib/model.js"
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const realFetch = globalThis.fetch
@@ -54,7 +54,7 @@ const req = (path, opts = {}) => new Request("https://proxy.example" + path, opt
 const post = (body, headers = {}) => ({ method: "POST", headers: { "content-type": "application/json", ...AUTH, ...headers }, body: JSON.stringify(body) })
 const chatBody = (content, extra = {}) => ({ model: ALLOWED_MODEL, messages: [{ role: "user", content }], ...extra })
 const lines = (n, w = 30) => Array.from({ length: n }, (_, i) => `${i + 1}. ${"x".repeat(w)}`).join("\n")
-const call = (path, opts = {}) => worker.fetch(req(path, opts), ENV)
+const call = (path, opts = {}, env = ENV) => worker.fetch(req(path, opts), env)
 const deltas = (raw) =>
   raw.split("\n").filter((l) => l.startsWith("data:")).filter((l) => !l.includes("[DONE]"))
     .map((l) => { try { return JSON.parse(l.slice(6)).choices?.[0]?.delta?.content ?? "" } catch { return "" } }).join("")
@@ -128,30 +128,51 @@ test("規則 5：白名單外路徑一律本地 404（/v1/completions 上游不�
   assert.equal(calls.length, 0)
 })
 
-test("/v1/models 只透傳（GET，不切塊不鑑權改寫）", async () => {
-  upstream = async (url, init) => {
-    calls.at(-1).method = init.method
-    return new Response(JSON.stringify({ object: "list", data: [{ id: ALLOWED_MODEL }] }), { status: 200, headers: { "content-type": "application/json" } })
-  }
+test("/v1/models 由本代理自己回放行清單（不花上游配額）", async () => {
+  upstream = async () => new Response("{}", { status: 200 })
   const r = await worker.fetch(req("/v1/models", { headers: { ...AUTH } }), ENV)
   assert.equal(r.status, 200)
-  assert.equal(await r.json().then((j) => j.data[0].id), ALLOWED_MODEL)
-  assert.equal(calls[0].method, "GET")
-  assert.equal(calls[0].url, "https://index-translate.bilibili.com/v1/models")
+  const ids = await r.json().then((j) => j.data.map((d) => d.id))
+  assert.deepEqual(ids, ALLOWED_MODELS)
+  assert.equal(calls.length, 0, "模型清單不透傳上游")
+  const post_ = await worker.fetch(req("/v1/models", { method: "POST", headers: { ...AUTH } }), ENV)
+  assert.equal(post_.status, 405)
 })
 
-test("規則 1：只放行 35B-A3B；其他模型本地 400，message 說明改用哪個", async () => {
+test("未鑑權時 /v1/models 也要先 401（鑑權在任何回應之前）", async () => {
+  const r = await worker.fetch(req("/v1/models"), ENV)
+  assert.equal(r.status, 401)
+})
+
+test("規則 1：放行清單上的名字都通，body.model 原樣帶到上游與回包", async () => {
+  echoUpstream()
+  for (const m of ALLOWED_MODELS) {
+    const r = await call("/v1/chat/completions", post(chatBody("hi", { model: m })))
+    assert.equal(r.status, 200, m)
+    assert.equal(calls.at(-1).body.model, m, m)
+    assert.equal(await r.json().then((j) => j.model), m, m)
+  }
+})
+
+test("規則 1：其他模型本地 400；-syllable 额外說明為什麼不放行", async () => {
   echoUpstream()
   for (const m of ["gpt-4o-mini", "Index-Translate-18B", "index-en-to-zh", ""]) {
     const r = await call("/v1/chat/completions", post(chatBody("hi", { model: m })))
     assert.equal(r.status, 400, m)
     const j = await r.json()
-    assert.match(j.error.message, new RegExp(`只放行 ${ALLOWED_MODEL}`))
+    assert.match(j.error.message, new RegExp(`放行的模型：${ALLOWED_MODELS.join("、")}`))
     assert.match(j.error.message, /不做靜默降級/)
     assert.equal(j.error.param, "model")
   }
+  for (const m of ["index-mt-9b-syllable", "index-mt-2b-syllable"]) {
+    const r = await call("/v1/chat/completions", post(chatBody("hi", { model: m })))
+    assert.equal(r.status, 400, m)
+    const j = await r.json()
+    assert.match(j.error.message, /我們測過/, m)
+  }
   assert.equal(calls.length, 0, "模型閘不消耗上游配額")
 })
+
 
 test("規則 3／9：一律向上游要串流，並只做四項協定層注入", async () => {
   echoUpstream()

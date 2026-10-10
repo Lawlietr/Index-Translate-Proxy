@@ -3,7 +3,7 @@
 > **狀態：第一版已實裝，主部署在 Vercel 並已做過線上探測（`probe-live` 19 ok / 0 fail / 1 skip）。**
 > 一份協定碼、兩個入口：`api/index.js`（Vercel Edge runtime，**現行主入口**）與
 > `src/worker.js`（Cloudflare Worker，保留，但**因出口 412 目前打不到上游**）。
-> `src/lib/` 協定碼不重複、`tests/*.test.mjs`（77 條離線，含入口橋接）、
+> `src/lib/` 協定碼不重複、`tests/*.test.mjs`（82 條離線，含入口橋接）、
 > `scripts/{probe-live,probe-sse-timing,smoke-local,probe-upstream,lint-zh}.mjs`。
 > 本檔的規則是實作的約束，不是已上線行為的宣傳；線上行為的證據在 `design/egress-options.md` 與
 > `design/upstream-probe-2026-10-10.md`。
@@ -44,7 +44,7 @@
 | 行對應 | 帶翻譯指令（`system` 或 `source_language`/`target_translation`）時：編號行會**逐行**回傳（18/18、34/34、51/51 都對過）。
   **只送編號句不帶指令**時不成立：上游會加前言並把每句展開成多語言列表（3 行→8 行、40 行→7 行），
   或只給一行「好的，請提供需要翻譯的文本。」→ 行對應是**提示條件式**的，不是端點保證〔2026-10-08、2026-10-10〕 |
-| 未知模型 | 回 **400**（不是 404），body 用 `detail` 欄位而**不是** OpenAI 的 `error` 形狀，內容自報白名單：`Index-Translate-35B-A3B, index-mt-2b, index-mt-9b, index-mt-2b-syllable, index-mt-9b-syllable`。回顯的 `model` **不可信**：`index-mt-9b` → 200 且回 `qwen35-9b-6624275-iter999`（內部部署名）；`Index-Translate-35B-A3B-preview` → 200 但回 `Index-Translate-35B-A3B`（**靜默退回**）；`model:""` → 靜默用 35B-A3B；已撤回的 `index-homura-*` → 400〔2026-10-10〕 |
+| 未知模型 | 回 **400**（不是 404），body 用 `detail` 欄位而**不是** OpenAI 的 `error` 形狀，內容自報白名單：`Index-Translate-35B-A3B, index-mt-2b, index-mt-9b, index-mt-2b-syllable, index-mt-9b-syllable`。回顯的 `model` **不可信**：`index-mt-9b` → 200 且回 `qwen35-9b-6624275-iter999`（內部部署名）；`Index-Translate-35B-A3B-preview` → 200 但回 `Index-Translate-35B-A3B`（**靜默退回**）；`model:""` → 靜默用 35B-A3B；已撤回的 `index-homura-*` → 400。**逐個實測過**（`probe-upstream.mjs model lines`）：`index-mt-2b`/`index-mt-9b` 200、編號行逐行對應（8/8）、比 35B 快（545ms vs 2,026ms / 8 行）；兩個 `-syllable` 會破掉編號行（9b 只回 1/8 行就 `stop`、2b 把編號丟掉）→ 本代理放行前三者、擋掉 `-syllable`。回顯的內部部署名不能再送回去（會 400）。證據與決定：`design/model-allowlist.md`〔2026-10-10〕 |
 | 逾時 | 非串流且輸出超過 **10.0s** → 上游回 **HTTP 504**（openresty）。**SSE 是真增量**：TTFT 170–1,020ms 且**與輸入長度無關**；生成 2,000 tokens 要 16s、2,512 tokens 要 35.7s → 強制串流是必須的（規則 3）〔2026-10-10〕 |
 | **輸出上限** | 截斷發生在**輸出側**：預設完成上限 **2,048 tokens**，用完就停並回 **`finish_reason:"length"`**（所以丟尾**可偵測**）。同一份 zh→en 測試文本：輸入 ≤2,400 字元（41 行）完整；≥2,600 字元只回 42 行，且 3,000/4,000/6,000 三者的輸出完全同長。`max_tokens` **被精確尊重**（要 40 就停 40）；`max_tokens:4096` 下 3,040 字元完整譯完（51/51 行、2,512 tokens）；`max_tokens:8192` 停在恰好 4,096 → **推定上游把 max_tokens 鉗在 4,096**（未證實）。zh→en 膨脹比 ≈ 0.83 completion tokens／輸入字元。**舊說法「輸入 4,000 字元會截斷」不成立**〔2026-10-10〕 |
 | 可達性 | `index-translate.bilibili.com` CNAME → `bilicdn1.com`（海外節點 `103.151.151.x`，`x-cache-webcdn: BYPASS`）→ 不是只在中國大陸可達〔2026-10-08〕 |
@@ -62,8 +62,11 @@
 1. **不換模型、不降級、不重試別個模型。** 上游對未知模型回 **400**（見上表），就照實回，附一句「只有
    `Index-Translate-35B-A3B` 由 `/v1/models` 宣告，請改用它」。靜默降級會讓使用者以為自己選的模型真的跑過。
    風險來自上游自己就會靜默：`model:""` 直接跑 35B-A3B，`-preview` 這類名字回 200 但不保證跑的是那個。
-   **本代理只放行 `Index-Translate-35B-A3B`**：上游 400 自報的其他模型（`index-mt-2b/9b/-syllable`）也一律
-   **本地 400**，不做 alias、不做試探——要放行得先自己測過（`TODO.md` 待做 10）。
+   **放行清單只有一份**（`src/lib/model.js`）：`Index-Translate-35B-A3B`、`index-mt-9b`、`index-mt-2b`——
+   這三個是**自己測過能用**（含編號行逐行對應）才進去的，見 `design/model-allowlist.md`。
+   兩個 `index-mt-*-syllable` **刻意不放行**：實測會漏行/丟編號，對插件來說比 400 更糟；`-preview`、
+   `model:""` 這類**靜默退回**也不放行。不做 alias、不做試探；不在清單上的一律**本地 400**，
+   訊息要把可用清單與「為什麼擋掉某個名字」寫清楚（插件會顯示 `error.message`）。
 2. **UA 由本代理固定為一個自訂、可識別的標識，不轉發客戶端 UA。** 上游擋的是**特定機器人 UA 黑名單**
    （`python-requests/*`、`Python-urllib/*` → 412），不是「不像瀏覽器」——自訂 token 實測 200，
    官方自己的客戶端也是自訂 token。固定值：`Index-Translate-Proxy/0.1 (+https://github.com/Lawlietr/Index-Translate-Proxy)`。
@@ -80,6 +83,7 @@
    中途某塊失敗時 v1 不補償：整個請求失敗、沿用那塊的 status（語義與理由見同檔 §3）。
 5. **路徑：**接受 `/v1/*`（插件形狀，自訂地址以 `/v1` 結尾）與 `/api/*`（內部另一專案的寫法）；
    **已帶 `/v1` 的路徑絕不再補前綴**（會變成 `/v1/v1/…` → 上游 404）。`/v1/responses` 只透傳、不組包。
+   `GET /v1/models` 由**本代理自己回**放行清單（不花上游配額；上游那份只宣告 35B-A3B，照抄會跟實際放行的不一致）。
    上游沒有的路徑（`/v1/completions`）與其他一切路徑由本代理**本地 404**，不丟給上游白費一次配額。
    唯一例外是 `GET /`：回一行文字說明這是 API、地址要填 `…/v1`，並用 `x-proxy-auth: configured|missing`
    讓部署者一眼看出自己有沒有設 key（不碰上游，不算「健康檢查」）。
@@ -95,9 +99,10 @@
    線上探測因此對這一項只驗證 429 的**形狀**，不宣稱全域保護）。真的全域閘需 Durable Objects（CF）或外部計數
    （Vercel，付費）→ v1 不做了，所以**規則 7 是盡力而為的保護，主要防線仍是插件端的並發設定**。
 8. **先鑑權，再轉發；key 不進上游。** worker 必須先驗證**共用的 `ITP_KEY`**（讀 `Authorization: Bearer`，
-   退回 `x-api-key`；設計與錯誤形狀見 `design/auth.md`）。驗證在**任何上游請求之前**完成，
-   401 不消耗上游配額；**驗完即丟**——不轉發 `Authorization`、`x-api-key`、`cookie`、CF 的 `x-*` 標頭，
-   對上游只帶 `content-type` 與 UA（上游不需鑑權）。
+   退回 `x-api-key`；設計與錯誤形狀見 `design/auth.md`）。**沒有 `ITP_KEY` 就一律回 503**——這個代理是
+   給自己部署、自己用的，不做匿名公開端點。鑑權在**任何上游請求之前**完成，401 不消耗上游配額；
+   **驗完即丟**——不轉發 `Authorization`、`x-api-key`、`cookie`、CF 的 `x-*` 標頭，對上游只帶
+   `content-type` 與 UA（上游不需鑑權）。
 9. **不注入 prompt 內容**：不加 system/user 訊息、不改使用者的字。允許的**協定層**注入只有四項，
    每一項都要在 README 看得到：`stream:true`（規則 3）、`chat_template_kwargs.enable_thinking:false`
    （官方要求客戶端顯式關閉，換端點不漏）、`stream_options:{include_usage:true}`
@@ -111,7 +116,7 @@
     程式碼已在，所以 CI 是該補的一項（見 TODO）；但在它之前，**部署與線上探測優先**。
 13. **部署是測試環的一環：**部署後必須用**真的線上入口**跑一次探測（`node scripts/probe-live.mjs <base>`；主入口現為
     Vercel，CF 那側也要跑一次以記錄出口狀態），至少覆蓋
-    插件的 `/v1` 路徑形狀、UA（腳本 UA 打 worker 不該 412）、未知模型的 400、超長段的切塊接回、
+    插件的 `/v1` 路徑形狀、UA（腳本 UA 打 worker 不該 412）、**放行清單真的能用（含 `index-mt-9b`）與不放行的名字回 400**、超長段的切塊接回、
     **拆塊請求中途失敗時的 status 與 `x-proxy-chunk-failed`**、**`GET /` 的一行回應與 `x-proxy-auth`**、
     未帶 key 的 401 形狀、上游 429 的 `retry-after` 是否原樣送出，以及**串流是真的增量**
     （`node scripts/probe-sse-timing.mjs <base>`；**量測 client 要用 curl**，本機 JS client 會把小塊合併，

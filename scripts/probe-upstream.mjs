@@ -244,10 +244,15 @@ async function groupUa() {
 }
 
 async function groupModel() {
-  const text = '1. 這個模型的名字不存在，用來測試網關會不會照實回 400。'
+  // 上游 /v1/models 只宣告 35B-A3B，但未知模型的 400 body 自報了一串名字 →
+  // 這裡逐個測「能不能真的跑」（不只是看 status），才能決定要不要放行（規則 1）。
+  const text = '1. 這個模型的名字是用來測試它會不會真的跑。\n2. 今天天氣很好，我們去公園散步。'
   const models = [
     ['declared-35B-A3B', 'Index-Translate-35B-A3B'],
     ['undeclared-self-reported', 'index-mt-9b'],
+    ['self-reported-2b', 'index-mt-2b'],
+    ['self-reported-9b-syllable', 'index-mt-9b-syllable'],
+    ['self-reported-2b-syllable', 'index-mt-2b-syllable'],
     ['retracted-homura', 'index-homura-35b-a3b'],
     ['suffix-preview', 'Index-Translate-35B-A3B-preview'],
     ['empty-model', ''],
@@ -262,14 +267,51 @@ async function groupModel() {
     report('model', name, r, {
       modelEcho: p?.modelEcho,
       deltas: p?.deltas,
+      outChars: p ? p.text.length : undefined,
+      finish: p?.finish,
+      preview: p && p.text ? p.text.replace(/\s+/g, ' ').slice(0, 60) : undefined,
       body: r.status !== 200 ? r.raw.slice(0, 200) : undefined,
     })
     if (r.status !== 200) saveFixture(`model-${name}-${r.status}.json`, r.raw)
+    else saveFixture(`model-${name}-200.txt`, p.text)
     await sleep(1200)
   }
   const m = await send({ path: MODELS, method: 'GET', headers: { 'user-agent': FIXED_UA } })
   report('model', 'GET /v1/models', m)
   saveFixture('models.json', m.raw)
+}
+
+// 能不能「用」而不只是「能跑」：插件靠編號行把譯文對應回原文 → 逐模型数行對應。
+async function groupLines() {
+  const text = [
+    '1. 會議九點開始。', '2. 請把報告帶來。', '3. 今天天氣很好。', '4. 他輕輕關上門。',
+    '5. 這本書值得讀。', '6. 金錢買不到時間。', '7. 車站在橋的對面。', '8. 記得鎖門。',
+  ].join('\n')
+  const models = [
+    ['declared-35B-A3B', 'Index-Translate-35B-A3B'],
+    ['index-mt-9b', 'index-mt-9b'],
+    ['index-mt-2b', 'index-mt-2b'],
+    ['index-mt-9b-syllable', 'index-mt-9b-syllable'],
+    ['index-mt-2b-syllable', 'index-mt-2b-syllable'],
+  ]
+  for (const [name, model] of models) {
+    const r = await send({
+      headers: { 'content-type': 'application/json', 'user-agent': FIXED_UA },
+      body: chatPayload(text, { model }),
+    })
+    const p = r.status === 200 ? parseSse(r.raw) : null
+    const numbered = p ? (p.text.match(/^\s*\d+[.、]/gm) || []).length : 0
+    report('lines', name, r, {
+      modelEcho: p?.modelEcho,
+      inLines: 8,
+      numberedOut: numbered,
+      outChars: p ? p.text.length : undefined,
+      finish: p?.finish,
+      preview: p ? p.text.replace(/\s+/g, ' ').slice(0, 90) : undefined,
+    })
+    if (p) saveFixture(`lines-${name}.txt`, p.text)
+    await sleep(1200)
+  }
 }
 
 async function groupUsage() {
@@ -467,6 +509,7 @@ const GROUPS = {
   selfcheck: groupSelfcheck,
   ua: groupUa,
   model: groupModel,
+  lines: groupLines,
   usage: groupUsage,
   think: groupThink,
   len: groupLen,

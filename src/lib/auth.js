@@ -34,6 +34,11 @@ export function authConfigured(env) {
   return Boolean(env && typeof env.ITP_KEY === "string" && env.ITP_KEY.trim())
 }
 
+/** 鑑權狀態只有一種開關：設了 key 才有鑑權；沒設就是 `missing`（請求回 503）。 */
+export function authMode(env) {
+  return authConfigured(env) ? "configured" : "missing"
+}
+
 /**
  * 客戶端 IP：定案 6 用 `cf-connecting-ip`（Cloudflare）。換平台時標頭名字不同，
  * 但「只有一份讀取順序」——各入口不要再各自轉標頭。順序：CF → Vercel → 通用標頭 → 執行環境自帶的 ip。
@@ -54,14 +59,13 @@ export function clientIp(request) {
  * 「未提供」與「不正確」給不同 message，但不洩漏哪把 key 有效（定案 5）。
  */
 export async function checkAuth(request, env) {
-  if (!authConfigured(env)) {
-    // 沒設 key 就不開放使用：這是部署者端的錯誤，回 503 比回 401 誠實。
+  if (!authConfigured(env)) {    // 沒設 key 就不開放使用：這是部署者端的錯誤，回 503 比回 401 誠實。
     return {
       ok: false,
       reason: "missing-config",
       response: localError(
         503,
-        "本代理未設定 ITP_KEY，無法驗證請求。部署者請執行 wrangler secret put ITP_KEY",
+        "本代理未設定 ITP_KEY，無法驗證請求。部署者請執行 wrangler secret put ITP_KEY（Vercel 則在專案的 Environment Variables 加 ITP_KEY）",
         { type: "service_unavailable", code: 503 },
       ),
     }

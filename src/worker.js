@@ -13,9 +13,9 @@ import {
   hintForStatus,
   proxyHeaders,
 } from "./lib/headers.js"
-import { checkAuth, checkAuthRateLimit, authConfigured, clientIp } from "./lib/auth.js"
+import { checkAuth, checkAuthRateLimit, authConfigured, authMode, clientIp } from "./lib/auth.js"
 import { readLimits, getGate, gateFullResponse } from "./lib/limits.js"
-import { ALLOWED_MODEL, modelNotAllowed, modelNotAllowedMessage } from "./lib/model.js"
+import { ALLOWED_MODEL, ALLOWED_MODELS, modelsPayload, modelNotAllowed, modelNotAllowedMessage } from "./lib/model.js"
 import { findTranslatable, planChunks, bodyForChunk, overLongLine } from "./lib/chunk.js"
 import {
   parseSSE,
@@ -47,11 +47,12 @@ export default {
     // 2) 根路徑：一行說明 + x-proxy-auth，讓部署者開根路徑就知道自己有沒有設 key（不碰上游）。
     if (route.kind === "root") {
       if (request.method !== "GET") return localError(404, "這個路徑不存在")
-      return new Response(rootDescription(url.host, authConfigured(env)), {
+      const mode = authMode(env)
+      return new Response(rootDescription(url.host, mode, ALLOWED_MODELS), {
         status: 200,
         headers: mergeHeaders(corsHeaders(), {
           "content-type": "text/plain; charset=utf-8",
-          "x-proxy-auth": authConfigured(env) ? "configured" : "missing",
+          "x-proxy-auth": mode,
         }),
       })
     }
@@ -71,6 +72,18 @@ export default {
       const rl = await checkAuthRateLimit(request, env)
       if (!rl.ok) return rl.response
       return auth.response
+    }
+
+    // 4b) `GET /v1/models` 由本代理**自己回**放行清單（不佔 slot、不花上游配額）。
+    // 上游那份只宣告 35B-A3B，照它回會舆本代理實際放行的不一致（design/model-allowlist.md）。
+    if (route.path === "/v1/models") {
+      if (request.method !== "GET") {
+        return new Response(null, { status: 405, headers: mergeHeaders(corsHeaders(), { allow: "GET" }) })
+      }
+      return new Response(JSON.stringify(modelsPayload()), {
+        status: 200,
+        headers: mergeHeaders(corsHeaders(), { "content-type": "application/json; charset=utf-8" }),
+      })
     }
 
     // 5) 並發閘（規則 7）：一個請求從進到出持有一個 slot（切塊是依序的，同時只有一塊在途）。
@@ -283,7 +296,7 @@ async function handleChat(request, route, limits, releaseGate) {
     parts.push(part)
   }
 
-  const completion = assembleCompletion(parts, { model: ALLOWED_MODEL, joins })
+  const completion = assembleCompletion(parts, { model: body.model || ALLOWED_MODEL, joins })
   log({
     req: "ok",
     path: route.path,

@@ -46,14 +46,22 @@ export function isChatPath(path) {
   return path === "/v1/chat/completions"
 }
 
-/** 根路徑的一行說明：部署者開根路徑就知道怎麼填地址、自己有沒有設 key（key 狀態同時走 x-proxy-auth 標頭）。 */
-export function rootDescription(host, authConfigured = false) {
-  const authLine = authConfigured
-    ? "鑑權：已啟用（請求需帶 Authorization: Bearer <key>）"
-    : "鑑權：未啟用（任何人都可直接用）"
+/**
+ * 根路徑的一行說明：開根路徑就知道怎麼填地址、能用哪些模型、鑑權是哪種狀態。
+ * 鑑權狀態同時走 `x-proxy-auth` 標頭（configured｜missing）。
+ */
+export function rootDescription(host, authState = false, models = ["Index-Translate-35B-A3B"]) {
+  const mode = authState === true ? "configured" : authState === false ? "missing" : String(authState)
+  const authLine =
+    mode === "configured"
+      ? "鑑權：已啟用（請求需帶 Authorization: Bearer <key>）"
+      : "鑑權：未設定（沒有 ITP_KEY，請求會回 503；請先設這個變數）"
+  const modelLine = models.length > 1
+    ? `本代理放行的模型：${models.join("、")}（第一個建議預設用）`
+    : `模型名稱 ${models[0]}`
   return (
     `Index-Translate-Proxy：這是 API，不是網頁。` +
-    `沉浸式翻譯的「自訂接口地址」請填 https://${host}/v1，模型名稱 Index-Translate-35B-A3B。` +
+    `沉浸式翻譯的「自訂接口地址」請填 https://${host}/v1；${modelLine}。` +
     `${authLine}。`
   )
 }

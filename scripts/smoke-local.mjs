@@ -1,7 +1,7 @@
 // 冒煙測試（不是待做 5 的正式測試）：用假 upstream 跑過 worker 每條主要路徑。
 // 跑法：node scripts/smoke-local.mjs
 import worker from "../src/worker.js"
-import { ALLOWED_MODEL } from "../src/lib/model.js"
+import { ALLOWED_MODEL, ALLOWED_MODELS } from "../src/lib/model.js"
 import { PROXY_UA } from "../src/lib/headers.js"
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -74,8 +74,9 @@ async function main() {
     check(`本地 404：${p}`, r.status === 404 && (await r.json()).error.message.includes("本代理沒有這個路徑"), r.status)
   }
   calls = []
-  await worker.fetch(req("/v1/models", { headers: KEY_HDR }), K)
-  check("GET /v1/models 透傳到上游", calls[0]?.url === "https://index-translate.bilibili.com/v1/models", calls[0]?.url)
+  const modelsBody = await worker.fetch(req("/v1/models", { headers: KEY_HDR }), K)
+  const modelIds = await modelsBody.json().then((j) => (j.data || []).map((d) => d.id))
+  check("GET /v1/models 回本代理的放行清單（不透傳、不花配額）", calls.length === 0 && modelIds.length === ALLOWED_MODELS.length && modelIds[0] === ALLOWED_MODEL, JSON.stringify(modelIds))
   calls = []
   await worker.fetch(req("/api/chat/completions", post(chatBody("hi"))), K)
   check("/api/chat/completions → 上游 /v1/chat/completions", calls[0]?.url === "https://index-translate.bilibili.com/v1/chat/completions", calls[0]?.url)

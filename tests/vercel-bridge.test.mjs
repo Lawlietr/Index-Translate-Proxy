@@ -79,14 +79,26 @@ test("沒有 key → 401（OpenAI 形狀，經過 Node 橋不破）", async () =
   assert.equal(calls.length, 0, "401 不該消耗上游配額（規則 8）")
 })
 
-test("未知模型 → 本地 400，不丟上游", async () => {
+test("不放行的模型（-syllable）→ 本地 400，不丟上游", async () => {
   const r = await client(`${BASE}/v1/chat/completions`, {
     method: "POST",
     headers: { "content-type": "application/json", ...AUTH },
-    body: JSON.stringify({ model: "index-mt-9b", messages: [{ role: "user", content: "hi" }] }),
+    body: JSON.stringify({ model: "index-mt-9b-syllable", messages: [{ role: "user", content: "hi" }] }),
   })
   assert.equal(r.status, 400)
+  assert.match(await r.text(), /我們測過/)
   assert.equal(calls.length, 0)
+})
+
+test("放行清單上的 index-mt-9b 经過橋仍能送到上游（不改寫 model）", async () => {
+  upstream = async () => new Response("data: [DONE]\n\n", { status: 200, headers: { "content-type": "text/event-stream" } })
+  const r = await client(`${BASE}/v1/chat/completions`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...AUTH },
+    body: JSON.stringify({ model: "index-mt-9b", messages: [{ role: "user", content: "1. hi" }] }),
+  })
+  assert.equal(r.status, 200)
+  assert.equal(JSON.parse(calls[0].body).model, "index-mt-9b")
 })
 
 test("串流客戶端：SSE 逐塊送達（不是收完才回）", async () => {
@@ -116,11 +128,21 @@ test("非串流客戶端：組回單一 chat.completion", async () => {
   assert.equal(j.choices[0].message.content, "合併結果")
 })
 
-test("GET /v1/models：只帶 UA，key 不進上游（規則 8）", async () => {
-  upstream = async () => new Response(JSON.stringify({ object: "list", data: [{ id: "Index-Translate-35B-A3B" }] }), {
-    status: 200, headers: { "content-type": "application/json" },
-  })
+test("GET /v1/models 由本地回，不透傳上游（不花配額）", async () => {
+  upstream = async () => new Response("{}", { status: 200 })
   const r = await client(`${BASE}/v1/models`, { headers: AUTH })
+  assert.equal(r.status, 200)
+  assert.deepEqual(await r.json().then((j) => j.data.map((d) => d.id)), ["Index-Translate-35B-A3B", "index-mt-9b", "index-mt-2b"])
+  assert.equal(calls.length, 0)
+})
+
+test("/v1/responses 透傳時只帶 UA，key 不進上游（規則 8）", async () => {
+  upstream = async () => new Response("data: [DONE]\n\n", { status: 200, headers: { "content-type": "text/event-stream" } })
+  const r = await client(`${BASE}/v1/responses`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...AUTH },
+    body: JSON.stringify({ model: "Index-Translate-35B-A3B", input: "hi" }),
+  })
   assert.equal(r.status, 200)
   const headers = new Headers(calls[0].headers)
   assert.match(headers.get("user-agent"), /^Index-Translate-Proxy\//)

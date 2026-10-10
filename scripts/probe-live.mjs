@@ -21,6 +21,7 @@ const BASE = (argOf("url") || POSITIONAL_URL || process.env.PROXY_URL || "https:
 const KEY = argOf("key") || process.env.PROXY_KEY || ""
 const OUT = argOf("out")
 const ALLOWED_MODEL = "Index-Translate-35B-A3B"
+const ALLOWED_MODEL_LIST = [ALLOWED_MODEL, "index-mt-9b", "index-mt-2b"]
 const t0 = Date.now()
 const stamp = () => new Date().toISOString().replace(/[-:TZ]/g, "").slice(0, 14)
 
@@ -114,7 +115,7 @@ async function main() {
 
   // 3) 路徑形狀（規則 5）：插件會填 <url>/chat/completions，不會自己補 /v1。
   const models = await call("/v1/models")
-  check("GET /v1/models → 200 且宣告白名單模型", models.res.status === 200 && models.text.includes(ALLOWED_MODEL), models.res.status)
+  check("GET /v1/models → 200 且列出本代理放行的三個模型", models.res.status === 200 && ALLOWED_MODEL_LIST.every((m) => models.text.includes(m)), models.res.status)
   const bare = await call("/chat/completions", {
     method: "POST",
     body: JSON.stringify({ model: ALLOWED_MODEL, messages: [{ role: "user", content: "1. hello" }] }),
@@ -128,7 +129,18 @@ async function main() {
     method: "POST",
     body: JSON.stringify({ model: "gpt-4o-mini", messages: [{ role: "user", content: "hi" }] }),
   })
-  check("未知模型 → 400 且說明該用哪個", badModel.res.status === 400 && badModel.text.includes("只放行"), `${badModel.res.status} ${badModel.text.slice(0, 120)}`)
+  check("不放行的模型 → 400 且列出可用名字", badModel.res.status === 400 && badModel.text.includes("放行的模型"), `${badModel.res.status} ${badModel.text.slice(0, 120)}`)
+  // 規則 1 的放行不是口說無憑：經本代理真的打得到 2B/9B（小請求，不花多少配額）。
+  const small9b = await call("/v1/chat/completions", {
+    method: "POST",
+    body: JSON.stringify({ model: "index-mt-9b", max_tokens: 64, messages: [{ role: "user", content: "1. Hello there." }] }),
+  })
+  check("放行 index-mt-9b：經本代理真的能翻", small9b.res.status === 200 && /"content"/.test(small9b.text), `${small9b.res.status} ${small9b.text.slice(0, 120)}`)
+  const blockedSyllable = await call("/v1/chat/completions", {
+    method: "POST",
+    body: JSON.stringify({ model: "index-mt-9b-syllable", messages: [{ role: "user", content: "1. hi" }] }),
+  })
+  check("-syllable 刻意不放行（會漏行/丢編號）", blockedSyllable.res.status === 400 && /我們測過/.test(blockedSyllable.text), `${blockedSyllable.res.status} ${blockedSyllable.text.slice(0, 100)}`)
   const noAuth = await call("/v1/chat/completions", {
     method: "POST",
     // 標頭值要 ASCII，所以這把「錯 key」不能用中文

@@ -1,0 +1,93 @@
+{
+  "ranAt": "2026-10-10T15:19:16.865Z",
+  "groups": [
+    "lines"
+  ],
+  "rows": [
+    {
+      "group": "lines",
+      "case": "declared-35B-A3B",
+      "status": 200,
+      "ms": 2026,
+      "firstByteMs": 444,
+      "sse": true,
+      "bytes": 18893,
+      "err": null,
+      "retryAfter": null,
+      "modelEcho": "Index-Translate-35B-A3B",
+      "inLines": 8,
+      "numberedOut": 8,
+      "outChars": 246,
+      "finish": "stop",
+      "preview": "1. The meeting starts at nine. 2. Please bring the report. 3. The weather is nice today. 4"
+    },
+    {
+      "group": "lines",
+      "case": "index-mt-9b",
+      "status": 200,
+      "ms": 1078,
+      "firstByteMs": 210,
+      "sse": true,
+      "bytes": 18337,
+      "err": null,
+      "retryAfter": null,
+      "modelEcho": "qwen35-9b-6624275-iter999",
+      "inLines": 8,
+      "numberedOut": 8,
+      "outChars": 259,
+      "finish": "stop",
+      "preview": "1. The meeting starts at nine o'clock. 2. Please bring the report with you. 3. The weather"
+    },
+    {
+      "group": "lines",
+      "case": "index-mt-2b",
+      "status": 200,
+      "ms": 545,
+      "firstByteMs": 188,
+      "sse": true,
+      "bytes": 18576,
+      "err": null,
+      "retryAfter": null,
+      "modelEcho": "qwen35-2b-linear-merge",
+      "inLines": 8,
+      "numberedOut": 8,
+      "outChars": 269,
+      "finish": "stop",
+      "preview": "1. The meeting starts at nine o'clock. 2. Please bring the report. 3. The weather is very "
+    },
+    {
+      "group": "lines",
+      "case": "index-mt-9b-syllable",
+      "status": 200,
+      "ms": 334,
+      "firstByteMs": 221,
+      "sse": true,
+      "bytes": 2386,
+      "err": null,
+      "retryAfter": null,
+      "modelEcho": "index-homura-9b",
+      "inLines": 8,
+      "numberedOut": 1,
+      "outChars": 30,
+      "finish": "stop",
+      "preview": "1. The meeting starts at nine."
+    },
+    {
+      "group": "lines",
+      "case": "index-mt-2b-syllable",
+      "status": 200,
+      "ms": 421,
+      "firstByteMs": 153,
+      "sse": true,
+      "bytes": 11943,
+      "err": null,
+      "retryAfter": null,
+      "modelEcho": "qwen35-2b-grpo-hindsight",
+      "inLines": 8,
+      "numberedOut": 0,
+      "outChars": 217,
+      "finish": "stop",
+      "preview": "The meeting starts at nine. Please bring the report. The weather is nice today. He closed "
+    }
+  ]
+}
