@@ -7,3 +7,6 @@ wrangler.log
 tests/fixtures/len-*.sse
 tests/fixtures/raise-*.sse
 tests/fixtures/cap-no-max-tokens.sse
+
+# probe-live 的結果（每次跑都不同；結論寫進 design/，這裡只是除錯用）
+results/

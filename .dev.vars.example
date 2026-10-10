@@ -1,0 +1,4 @@
+# 本地開發用的 Secret（`cp .dev.vars.example .dev.vars`；.dev.vars 已被 .gitignore 擋掉，不會進 repo）。
+# 線上請用 `wrangler secret put ITP_KEY`，不要放 [vars]——vars 是明文，會在 dashboard 上看得到。
+# 沒有 ITP_KEY 時 worker 一律回 503（design/auth.md 定案 1）。
+ITP_KEY=

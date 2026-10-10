@@ -3,18 +3,32 @@
 name = "index-translate-proxy"
 compatibility_date = "2026-10-01"
 
-# 骨架階段：入口還沒建立，所以這行先註解掉，不假裝能部署。
-# 建立 src/worker.js 時把它打開（TODO.md 待做 3；「Deploy to Cloudflare」按鈕也要它，見 design/deploy-button.md）。
-# main = "src/worker.js"
+# 入口。已建立（“骨架階段”的註解已拿掉）：“Deploy to Cloudflare” 按鈕也要這一條，見 design/deploy-button.md。
+main = "src/worker.js"
 
 # 執行期可調的閾值（皆為字串，Worker 內會轉數字並套預設值）。
 # MAX_INPUT_CHARS：超過就切塊。2,500 = 依 2026-10-10 探測定的邊界（上游截斷在**輸出側**：預設 2,048
 #   completion tokens；代理自己帶 max_tokens:4096 後 3,040 字元仍完整譯完，這裡留膨脹餘量）。
 #   數字與方法見 design/upstream-probe-2026-10-10.md §1。
 # MAX_TOKENS_DEFAULT：送給上游的 max_tokens 預設值；客戶端自己帶 max_tokens 就用客戶端的（規則 9）。
-# MAX_INFLIGHT：單 isolate 同時進上游的**塊**數（一個拆三塊的請求佔三個額度，規則 7）。
+# MAX_INFLIGHT：單 isolate **同時在途的請求數**（一個請求從進到出一個 slot；切塊是依序的，不按塊計）。
 #   上游近乎串行：10 個併發只把延遲拉成 5 倍，不增加吞吐 → 插件端也該設「每秒最大請求數 3~5」。
+#   計的是什麼、為什麼不計塊：design/streaming-and-chunking.md §2。
+# SLOT_WAIT_MS：閘滿時先在本地排隊的最久時間，等不到才回 429 + Retry-After（只在首位元組送出前可能发生）。
+# MAX_LINE_CHARS：單行長度上限。只在**行界**切塊，所以單行超長無法切 → 回 413 並說明怎麼繞過（規則 4）。
+# MAX_BODY_BYTES：要送上游的單塊 body 上限。自己先給可讀的 413，不讓它在上游側變成不明錯誤。
 [vars]
 MAX_INPUT_CHARS = "2500"
 MAX_TOKENS_DEFAULT = "4096"
 MAX_INFLIGHT = "4"
+SLOT_WAIT_MS = "15000"
+MAX_LINE_CHARS = "2000"
+MAX_BODY_BYTES = "16384"
+
+# 鑑權失敗（401）的**獨立限流**：不與正常流量共用額度，免得有人亂試 key 把正常請求擠掉。
+# 代碼讀的是綁定名 `AUTH_RL`（綁定不存在時不擋，本地 dev 也能跑）。定案理由見 design/auth.md 定案 6。
+# 注：wrangler 4.149 這一節用的是 `name`（不是 `binding`）；period 只允许 10 或 60。
+[[ratelimits]]
+name = "AUTH_RL"
+namespace_id = "1001"
+simple = { limit = 30, period = 60 }
