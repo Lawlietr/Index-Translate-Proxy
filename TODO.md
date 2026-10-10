@@ -10,16 +10,14 @@
    - 一次性資源清掉（**本次的 Vercel token 沒有 `Projects:Read`，列表/刪除都回 403 → 只能在 dashboard 手動做**）：
      Vercel 的 `itp-vercel-probe`／`itp-egress-probe` 兩個探測專案（探測碼已收進 `probes/`，刪專案不會讓證據丟失）。
      保留 `itp-egress-probe` 也可以——它是目前唯一「從我們實際出口驗上游通不通」的探測。
-   - **key 衛生（待辦）**：README 曾公開發過一把示範 key（GitHub 鏡像也是公開的）→ 那把**現在仍在用**，要輪換掉。
-     做法：Vercel → Settings → Environment Variables → `ITP_KEY` 改值 → 重新部署 →
-     `node scripts/probe-live.mjs https://index-translate-proxy.vercel.app --key <新值>`。
-     （腳本側的 `VERCEL_TOKEN` 已過期，所以這次沒能代跑。）之後的規則：實際用的 key 一律不進文件。
+   - ~~**key 衛生**~~（**已做**，2026-10-12）：README 公開過的那把示範 key 已輪換（Vercel 的 Production/Preview/Development
+     三個環境都換、重新部署、`probe-live` 用新 key 重跑 21/0/1），README 裡出現 0 次。往後的規則：**實際用的 key 一律不進文件**。
    - **安全性家務**：目前用的 Vercel 帳號 Token 是 7 天效期（2026-10-10 簽發）；到期或外洩就在 dashboard 撤銷重發。
      部署走 `npm run deploy:vercel`（需要 `VERCEL_TOKEN`＋`VERCEL_TEAM_ID` 兩個環境變數，都不寫進 repo）。
      `ITP_KEY` 目前 CF 與 Vercel 共用同一把，若要分開管理，Vercel 那側在 Settings → Environment Variables 改。
 1. **規則 7 的並發閘在兩個平台都是 per-instance**（2026-10-10 線上實測：Vercel 把 12 個併發分散到 6+ 個實例，
    一個都不擋；CF 多 isolate 同理）。v1 的保護因此主要落在**插件端「每秒最大請求數」3~5**（README 已寫）。
-   要真的全域閘：CF 需要 Durable Objects 計數、Vercel 需要外部計數（付費）→ 目前不值得，但**别再把它當成全局保證**。
+   要真的全域閘：CF 需要 Durable Objects 計數、Vercel 需要外部計數（付費）→ 目前不值得，但**別再把它當成全局保證**。
 2. **補測（小規模，隨時可跑）** —— `node scripts/probe-upstream.mjs <群組>`，未證明項清單見
    `design/upstream-probe-2026-10-10.md`「未證明」節。優先度：
    - `max_tokens` 是否被鉗在 4,096（一檔 `max_tokens:16384` 就能判）。

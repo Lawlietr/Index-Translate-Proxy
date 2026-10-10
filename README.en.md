@@ -40,7 +40,7 @@ Click the button → paste that string into the prompted field → Deploy. There
 Prefer not to use the button: Vercel → import this repo (Framework: Other) → add `ITP_KEY` under Environment Variables → Deploy.
 
 ```bash
-# once deployed, confirm everything works (21 protocol checks: auth, chunking, 413, 429 pass-through, streaming…)
+# once deployed, confirm everything works (protocol checks: auth, chunking, 413, 429 pass-through, real streaming…)
 node scripts/probe-live.mjs https://<your-project>.vercel.app --key <your ITP_KEY>
 ```
 

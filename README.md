@@ -40,7 +40,7 @@ openssl rand -hex 32    # 輸出就是之後填進插件「API Key」欄位的�
 不想用按鈕：Vercel → Import 這個 repo（Framework 選 Other）→ Environment Variables 加 `ITP_KEY` → Deploy。
 
 ```bash
-# 部署完確認一切正常（21 項協定檢查：鑑權、切塊、413、429 透傳、串流…）
+# 部署完確認一切正常（協定檢查：鑑權、切塊、413、429 透傳、真串流…）
 node scripts/probe-live.mjs https://<你的專案>.vercel.app --key <你的 ITP_KEY>
 ```
 
