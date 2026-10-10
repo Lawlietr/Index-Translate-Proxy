@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "name": "itp-egress-probe",
+  "builds": [
+    {
+      "src": "api/**",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/stream-([a-z]+)",
+      "dest": "/api/stream-$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/probe.js"
+    }
+  ],
+  "fluid": true
+}

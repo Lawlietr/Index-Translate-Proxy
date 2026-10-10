@@ -18,7 +18,7 @@ const BAD = new Set([
   "异", "弃", "补", "续", "个", "并", "档",
 ])
 
-const roots = process.argv.slice(2).length ? process.argv.slice(2) : ["src", "api", "scripts", "tests", "design", "README.md", "AGENTS.md", "TODO.md"]
+const roots = process.argv.slice(2).length ? process.argv.slice(2) : ["src", "api", "probes", "scripts", "tests", "design", "README.md", "AGENTS.md", "TODO.md"]
 // tests/fixtures 是上游回的具體內容（簡體），不是我們寫的文字 → 不掃。
 const SKIP_DIRS = new Set(["node_modules", ".git", "tmp", ".wrangler", ".forgejo", "results", "fixtures"])
 const EXT = new Set([".js", ".mjs", ".md", ".toml", ".json"])

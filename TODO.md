@@ -7,8 +7,9 @@
 
 0. **線上探測的收尾**（規則 13 已做一半）：
    - `wrangler.toml` 明確寫 `workers_dev = true` / `preview_urls`（消除部署警告）。
-   - 一次性資源清掉：Vercel 的 `itp-vercel-probe`／`itp-egress-probe` 兩個探測專案、CF 的 `itp-ua-probe`
-     與 `itp-echo`（後兩個因 token 缺 `Memberships:Read`，要在 dashboard 手動刪）。
+   - 一次性資源清掉（**本次的 Vercel token 沒有 `Projects:Read`，列表/刪除都回 403 → 只能在 dashboard 手動做**）：
+     Vercel 的 `itp-vercel-probe`／`itp-egress-probe` 兩個探測專案（探測碼已收進 `probes/`，刪專案不會讓證據丟失）、
+     CF 的 `itp-ua-probe` 與 `itp-echo`。保留 `itp-egress-probe` 也可以——它是目前唯一「從我們實際出口驗上游通不通」的探測。
    - **安全性家務**：本次會話用過的 Vercel 帳號 Token 已出現在對話裡，請在 dashboard 撤銷重發；
      `ITP_KEY` 目前 CF 與 Vercel 共用同一把，若要分開管理，Vercel 那側在 Settings → Environment Variables 改。
 1. **規則 7 的並發閘在兩個平台都是 per-instance**（2026-10-10 線上實測：Vercel 把 12 個併發分散到 6+ 個實例，
