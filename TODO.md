@@ -10,10 +10,8 @@
    - 一次性資源清掉（**本次的 Vercel token 沒有 `Projects:Read`，列表/刪除都回 403 → 只能在 dashboard 手動做**）：
      Vercel 的 `itp-vercel-probe`／`itp-egress-probe` 兩個探測專案（探測碼已收進 `probes/`，刪專案不會讓證據丟失）、
      CF 的 `itp-ua-probe` 與 `itp-echo`。保留 `itp-egress-probe` 也可以——它是目前唯一「從我們實際出口驗上游通不通」的探測。
-   - **阻塞項：Vercel token 已失效**（`invalidToken`／CLI 回「Not authorized」）→ main 上的新版（放行清單、
-     本地 `/v1/models` 清單）**目前無法部署**，線上仍是舊版（`GET /v1/models` 可辨認版本）。
-     需要一組新的帳號 Token（或把 repo 連到 Vercel 的 Git 整合，讓 push 觸發部署）。
-   - **安全性家務**：本次會話用過的 Vercel 帳號 Token 已出現在對話裡（現已失效），請在 dashboard 撤銷重發；
+   - **安全性家務**：目前用的 Vercel 帳號 Token 是 7 天效期（2026-10-10 簽發）；到期或外洩就在 dashboard 撤銷重發。
+     部署走 `npm run deploy:vercel`（需要 `VERCEL_TOKEN`＋`VERCEL_TEAM_ID` 兩個環境變數，都不寫進 repo）。
      `ITP_KEY` 目前 CF 與 Vercel 共用同一把，若要分開管理，Vercel 那側在 Settings → Environment Variables 改。
 1. **規則 7 的並發閘在兩個平台都是 per-instance**（2026-10-10 線上實測：Vercel 把 12 個併發分散到 6+ 個實例，
    一個都不擋；CF 多 isolate 同理）。v1 的保護因此主要落在**插件端「每秒最大請求數」3~5**（README 已寫）。
@@ -38,6 +36,11 @@
    仍待測：其他語言方向的行對應與品質（目前只測過 zh→en、8 行）。
 
 ## 已完成（最多五項，新在上）
+（最多五項，新在上）
+- 2026-10-10：**放行清單上線並線上探測** —— 逐個測過 `index-mt-2b/9b/-syllable`（`design/model-allowlist.md`）→
+  放行 `Index-Translate-35B-A3B`/`index-mt-9b`/`index-mt-2b`，`-syllable` 因會漏行／丟編號不放行；
+  `GET /v1/models` 改由本代理自己回。重新部署後線上 `probe-live` **21 ok / 0 fail / 1 skip**、`probe-sse-timing` 真增量（跨度 1,114ms ≈ 上游 1,148ms）。
+  另新增 `scripts/serve-vercel-bridge.mjs`（不起 Vercel 也能測「Vercel 這條路徑」）。README 精簡，論證移到 `design/why-proxy.md`。
 - 2026-10-10：**搬到 Vercel 並線上探測** —— `https://index-translate-proxy.vercel.app` 上線（Edge runtime 入口
   `api/index.js`，協定碼不重複），`probe-live` **19 ok / 0 fail / 1 skip**（跳過的是 per-instance 併發閘，平台上不可測），
   `probe-sse-timing` 兩側都**真增量**（首塊 434ms、跨度 1,112ms ≈ 上游 1,148ms）。同時把 CF 那份也重新部署並探測：
@@ -52,15 +55,5 @@
   並跑線上探測 → **發現阻塞性事實：從 CF 出口打上游一律 412**（四轮一次性 probe worker 定位：UA 無關、
   全站、`resolveOverride`/raw socket 都不能繞）。已寫入 AGENTS 事實表與 design/upstream-probe §8。
 
-- 2026-10-10：實作完成 —— `src/worker.js` + `src/lib/{route,headers,auth,model,chunk,stream,limits}.js`、
-  `tests/*.test.mjs`（67 條離線）、`scripts/smoke-local.mjs`（51 項）、`scripts/probe-live.mjs`（19 項，本地 miniflare 全過）、
-  `scripts/lint-zh.mjs`（規則 11）。定案：單行超 `MAX_LINE_CHARS` → **本地 413**（不硬切）、
-  並發閘先排隊（`SLOT_WAIT_MS`）再 429、計「請求」不計塊。新事實：**行對應是提示條件式的**
-  （不帶翻譯指令時上游會展開多語言列表／前言），見 design/upstream-probe §1。
 
-- 2026-10-10：第二輪上游探測（`scripts/probe-upstream.mjs` ＋ `design/upstream-probe-2026-10-10.md` ＋ `tests/fixtures/`）。
-  推翻五條舊事實；關鍵是**截斷在輸出側**（預設 2,048 completion tokens、`finish_reason:"length"` 可偵測、
-  `max_tokens` 被尊重且可能鉗在 4,096）→ `MAX_INPUT_CHARS` 1500→2500、新增 `MAX_TOKENS_DEFAULT=4096`、
-  規則 9 開放四項協定層注入、規則 2 的 UA 定案為自訂標識、事實表新增 `usage` 與「字元→token 不可換算」兩列。
-
-
+（更早的完成紀錄查 `git log --oneline`——例如第二輪上游探測推翻五條舊事實，關鍵是「截斷在輸出側」。）

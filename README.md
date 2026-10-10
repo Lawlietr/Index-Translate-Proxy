@@ -21,8 +21,7 @@
 | API Key | `itp-3c3daf945ef7749f27852d074fb875bb`（示範用、共用；可能隨時輪換，穩定使用請自己部署一把） |
 
 線上狀態：`GET https://index-translate-proxy.vercel.app/` 會回一行說明與 `x-proxy-auth`，不用翻控制台。
-若 `index-mt-9b`／`index-mt-2b` 回 400，代表那個部署跑的是舊版（`GET /v1/models` 會列出它實際放行的名字）；
-部署最新的 main 就有三個。
+要確認某個實例實際放行了哪些模型：`curl -H "Authorization: Bearer $KEY" <base>/v1/models`——由本代理自己回，不轉發上游。
 
 ## 用法二：自己部署（Vercel，約 5 分鐘）
 

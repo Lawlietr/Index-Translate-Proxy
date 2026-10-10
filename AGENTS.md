@@ -1,8 +1,8 @@
 # AGENTS.md — Index-Translate-Proxy
 
-> **狀態：已實裝並已上線（Vercel 主入口，`probe-live` 19 ok / 0 fail / 1 skip）。目前線上跑的是那一版；**
-> **放行清單（本檔規則 1 的新版）已在 main，但重新部署需要一組有效的 Vercel token**
-> （舊 token `invalidToken`）。那一版已用 `scripts/serve-vercel-bridge.mjs` 起本地入口跑過 `probe-live` **21 ok / 0 fail**（打真上游）。
+> **狀態：已實裝並已上線。主入口 `https://index-translate-proxy.vercel.app`，線上探測 `probe-live` 21 ok / 0 fail / 1 skip**
+> （跳過的是 per-instance 併發閘，平台上不可測），`probe-sse-timing` 兩側真增量。放行清單（規則 1）也已線上驗證
+> （含「`index-mt-9b` 經本代理真的能翻」與「`-syllable` 被擋」兩項）。
 > 一份協定碼、兩個入口：`api/index.js`（Vercel Edge runtime，**現行主入口**）與
 > `src/worker.js`（Cloudflare Worker，保留，但**因出口 412 目前打不到上游**）。
 > `src/lib/` 協定碼不重複、`tests/*.test.mjs`（82 條離線，含入口橋接）、
