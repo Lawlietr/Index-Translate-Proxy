@@ -10,7 +10,7 @@
    證據與判讀見 `design/upstream-probe-2026-10-10.md` §8–§9。先定方向再改 `src/`：
    - (a) **Tunnel origin（自架 connector）** ← 現在的首选：`cloudflared` 跑在既有機器上，zone 開一筆
      Tunnel 記錄；Worker 打它（CF 內部的一跳，不會被擋），最後一跳由本地線路打上游（已證明 200）。
-     需要：`cloudflared` 的 tunnel 建立權限（不在現有 token 裡）、一台不关機的機器。
+     需要：`cloudflared` 的 tunnel 建立權限（不在現有 token 裡）、一台不會關機的機器。
    - (b) **WARP egress（Network egress / connector）**：**只換來源 IP，不換目的地邊緣** → 從 §9 的證據看
      不保證有效，而且 Zero Trust 的 API 回 **403**（看不到也不能建）。排在 (a) 後面。
    - (c) 請上游（bilibili）白名單 CF 出口：成本最低但不可控。
