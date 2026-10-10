@@ -1,15 +1,15 @@
 # TODO — Index-Translate-Proxy
 
-> 本檔只記錄**待做項目**與下方「已完成」區（最多五項，新在上）；更早的完成紀錄查 `git log --oneline`。
+> 本檔三種區塊：**待做**（依依賴順序）、**可選**（明確標為不是待做的備援組，例如 CF 入口）、**已完成**（最多五項，新在上）。
+> 更早的完成紀錄查 `git log --oneline`。
 > 不可妥協的約束在 [`AGENTS.md`](AGENTS.md)（規則 14＝文件分工），設計與實測紀錄在 `design/`——本檔不重複內容。
 
 ## 待做（依賴順序）
 
-0. **線上探測的收尾**（規則 13 已做一半）：
-   - `wrangler.toml` 明確寫 `workers_dev = true` / `preview_urls`（消除部署警告）。
+0. **線上探測的收尾**（規則 13 已做一半，Vercel 側）：
    - 一次性資源清掉（**本次的 Vercel token 沒有 `Projects:Read`，列表/刪除都回 403 → 只能在 dashboard 手動做**）：
-     Vercel 的 `itp-vercel-probe`／`itp-egress-probe` 兩個探測專案（探測碼已收進 `probes/`，刪專案不會讓證據丟失）、
-     CF 的 `itp-ua-probe` 與 `itp-echo`。保留 `itp-egress-probe` 也可以——它是目前唯一「從我們實際出口驗上游通不通」的探測。
+     Vercel 的 `itp-vercel-probe`／`itp-egress-probe` 兩個探測專案（探測碼已收進 `probes/`，刪專案不會讓證據丟失）。
+     保留 `itp-egress-probe` 也可以——它是目前唯一「從我們實際出口驗上游通不通」的探測。
    - **key 衛生（待辦）**：README 曾公開發過一把示範 key（GitHub 鏡像也是公開的）→ 那把**現在仍在用**，要輪換掉。
      做法：Vercel → Settings → Environment Variables → `ITP_KEY` 改值 → 重新部署 →
      `node scripts/probe-live.mjs https://index-translate-proxy.vercel.app --key <新值>`。
@@ -26,18 +26,26 @@
    - 其他語言方向的膨脹比（只測過 zh→en ≈0.83 output tokens／輸入字元）→ 直接影響 `MAX_INPUT_CHARS` 的邊界。
    - 429 的真實 fixture（本輪 20k/90s 與 36k 併發都沒觸發；測試先用手抄 body）。
    - Vercel 側 `clientIp()` 實際讀到哪種標頭（只影響 401 限流的鍵，不影響協定）—— 探測時順手記。
+   - **其他語言方向的行對應與譯文品質**（只測過 zh→en、8 行）→ 決定放行清單要不要再擴大。
 3. `design/quotas-and-chunking.md`：60k TPM/IP 對共用出口 IP 的影響與預算。可用起點（2026-10-10 實測）：
    一個 2,400 字元的塊 ≈ 1,584 prompt + 2,019 completion ≈ **3.6k tokens** → 60k/min 約 **16 塊/分鐘 per IP**，
    而 Vercel/CF 的 egress IP 都是共用池 → 這個額度不是我們獨佔的。另寫 `MAX_INFLIGHT` 與上游 429／`retry-after` 的透傳策略。
 4. `.forgejo/workflows/ci.yml`（跑 `npm test`、`npm run lint:zh`、`npm run lint:readme`、`npm run smoke`；runner 的 label 與 image 用 `mt`，自有環境既有值）。
    CI 現在也能順跑 `node scripts/probe-live.mjs <Vercel URL>`——線上探測已有可重複的腳本。
-5. **Deploy to Cloudflare 按鈕**（[`design/deploy-button.md`](design/deploy-button.md)）：鏡像 `github.com/Lawlietr/Index-Translate-Proxy`
-   已建、已 public ✓；`main` 已開、`[[ratelimits]]` 已有預設值 → 剩下放按鈕 + 手動三行退路。
-   **注意**：CF 出口打上游 412（見 `design/egress-options.md`），所以在出口問題解決前，按鈕部署出來的實例**打不到上游**；
-   要做的是「Deploy to Vercel」為主、CF 按鈕為附。
-6. ~~上游其他模型的實際行為~~（**已做**）：`index-mt-2b`/`index-mt-9b` 可用且編號行逐行對應 → **已放行**；
-   兩個 `-syllable` 會漏行／丟編號 → 不放行。證據與決定：`design/model-allowlist.md`。
-   仍待測：其他語言方向的行對應與品質（目前只測過 zh→en、8 行）。
+
+## 可選（**不是待做**）：Cloudflare Worker 入口
+
+`src/worker.js` 是**保留的備援出口**，不是需要完成的工作：已實測**從 CF 出口打上游一律 412**
+（[`design/egress-options.md`](design/egress-options.md)），所以那樣部署出來的實例也翻譯不了東西。
+README 的 CF 段落因此只是「想試的人請先看這裡」，不是第二條部署路線。
+**只有當我們決定動出口（WARP egress／Tunnel origin／其他）時**，這組才啟用：
+
+- 先選一個出口方案並**先探測證明它能打到上游**（`probes/`、`node scripts/probe-upstream.mjs`），再談部署。
+- `wrangler.toml` 明確寫 `workers_dev = true` / `preview_urls`（消除部署警告）、把預設值寫進 `[vars]`。
+- **Deploy to Cloudflare 按鈕**（[`design/deploy-button.md`](design/deploy-button.md)）：鏡像已建、已 public、`main` 已開、
+  `[[ratelimits]]` 已有預設值 → 剩下放按鈕與手動三行退路。
+- 清掉 CF 的一次性資源：`itp-ua-probe`、`itp-echo`。
+- 真的啟用了才照規則 13 跑一次 `probe-live`/`probe-sse-timing`（記錄出口狀態；412 本身也是要記錄的結果）。
 
 ## 已完成（最多五項，新在上）
 （最多五項，新在上）
