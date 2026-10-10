@@ -5,6 +5,15 @@
 
 ## 待做（依賴順序）
 
+0. **【阻塞】出口問題**：Worker 打上游一律 412（CF 邊緣 bot 過濾，條件是出口 IP 不是 UA，見
+   `design/upstream-probe-2026-10-10.md` §8）。先定方向再动 `src/`：
+   - (a) **Cloudflare Network egress / WARP connector**：出口換成 AS9009。需要 Zero Trust 的 seat 與
+     token 權限（本輪 `gateway/.../networks` 與 `virtual-networks` 都回 **403**，看不到也不能建）。
+     代价：免費層 WARP 流量有 10GB/月上限（待確認），且需 dashboard 手动開。
+   - (b) **非 CF 出口的中转**（自有機器／家用机 + Cloudflare Tunnel 的 origin 出口）：Worker 只做
+     鑑權＋切塊＋組包，翻譯請求由中轉打上游。保留本 repo 的價值，但不再是「純 Worker」。
+   - (c) 請上游（bilibili）白名單 CF 出口：成本最低但不可控。
+   验证顺序：先做 (a) 的最小可行性（能在 dashboard 看到 Network egress 開關吗？），不行就 (b) 的 prototype。
 1. **補測（小規模，隨時可跑）** —— `node scripts/probe-upstream.mjs <群組>`，未證明項的完整清單見
    `design/upstream-probe-2026-10-10.md`「未證明」節。優先度：
    - `max_tokens` 是否被鉗在 4,096（一檔 `max_tokens:16384` 就能判）。
@@ -13,9 +22,12 @@
 2. `design/quotas-and-chunking.md`：60k TPM/IP 對 CF egress 共用 IP 的影響與預算。可用起點（2026-10-10 實測）：
    一個 2,400 字元的塊 ≈ 1,584 prompt + 2,019 completion ≈ **3.6k tokens** → 60k/min 約 **16 塊/分鐘 per IP**，
    而 Worker 的 egress IP 是共用池 → 這個額度不是我們獨佔的。另寫 `MAX_INFLIGHT` 與上游 429／`retry-after` 的透傳策略。
-3. **部署與線上探測**（規則 13）：`wrangler secret put ITP_KEY` → `npm run deploy` →
-   `node scripts/probe-live.mjs https://<worker>`（已在本地 miniflare 跑過 19/19，**不代表線上**）。
-   再把實際網域補進 `README.md`。
+3. **部署與線上探測**（規則 13）：~~未部署~~ → **已部署**
+   `https://index-translate-proxy.yanzilme.workers.dev`（secret `ITP_KEY` 已設）。線上探測 **9/19**，
+   失败项全部是上游 412 → 先做待做 0。剩下的真工作：把實際網域補進 `README.md`、
+   `wrangler.toml` 明確寫 `workers_dev = true` / `preview_urls`（消除部署警告），以及
+   **並發閘在多 isolate 下失效**（本地同 isolate 才過，線上 8 併發不會本地 429）→ 需要 DO 閘門。
+4. `.forgejo/workflows/ci.yml`
 4. `.forgejo/workflows/ci.yml`（跑離線測試與 `npm run lint:zh`；runner 的 label 與 image 用 `mt`，自有環境既有值）。
 5. **Deploy to Cloudflare 按鈕**（[`design/deploy-button.md`](design/deploy-button.md)）：鏡像 `github.com/Lawlietr/Index-Translate-Proxy` 已建、已 public ✓；`main` 已開、`[[ratelimits]]` 已有預設值 → 剩下放按鈕 + 手動三行退路，加上 README 的「官方本機橋（`call_api.py --serve` / `run_proxy_windows.bat`）vs 本 worker」對比章節。
 6. **上游其他模型的實際行為**（`index-mt-2b/9b/-syllable` 與 `-preview`）：等 worker 線上可用之後再測，
@@ -23,6 +35,9 @@
 
 ## 已完成（最多五項，新在上）
 
+- 2026-10-10：部署到 `index-translate-proxy.yanzilme.workers.dev`（`wrangler secret put ITP_KEY` + `deploy`）
+  並跑線上探測 → **發現阻塞性事實：從 CF 出口打上游一律 412**（四轮一次性 probe worker 定位：UA 無關、
+  全站、`resolveOverride`/raw socket 都不能繞）。已寫入 AGENTS 事實表與 design/upstream-probe §8。
 - 2026-10-10：實作完成 —— `src/worker.js` + `src/lib/{route,headers,auth,model,chunk,stream,limits}.js`、
   `tests/*.test.mjs`（67 條離線）、`scripts/smoke-local.mjs`（51 項）、`scripts/probe-live.mjs`（19 項，本地 miniflare 全過）、
   `scripts/lint-zh.mjs`（規則 11）。定案：單行超 `MAX_LINE_CHARS` → **本地 413**（不硬切）、
@@ -34,6 +49,6 @@
   規則 9 開放四項協定層注入、規則 2 的 UA 定案為自訂標識、事實表新增 `usage` 與「字元→token 不可換算」兩列。
 - 2026-10-10：定案切塊／串流／失敗語義（計數以塊為單位、中途失敗不補償、跨塊插入分隔符、`usage` 不造假、
   `GET /` 回一行說明、hint 走 `x-proxy-hint`）→ `design/streaming-and-chunking.md`；規則 1/3/4/5/6/7 同步。
-- 2026-10-10：文件一致性檢查——`AGENTS.md` 事實表改成重測後的結論、把事實從 `TODO.md` 收攏回 `AGENTS.md`（規則 14）、README 的 API Key 與配額兩列改成現行設計。
-- 2026-10-10：定案鑑權與配額守門（共用 key、401 用 OpenAI 錯誤形狀、401 獨立限流）→ `design/auth.md`；查證部署按鈕的前置 → `design/deploy-button.md`；GitHub 鏡像建立並推送（public）。
-- 2026-10-10：盤點官方更新（README 的 `/v1/responses`、`call_api.py` 官方橋原始碼）並重測公網端點 → 配額、串流行為、模型白名單、思考標記四項修正（已寫入 `AGENTS.md` 事實表）。
+- 2026-10-10：盤點官方更新（`/v1/responses`、官方本機橋 `call_api.py`）並重測公網端點 → 配額、串流、
+  模型白名單、思考標記四項修正；定案鑑權（`design/auth.md`）與部署按鈕前置（`design/deploy-button.md`）；
+  GitHub 鏡像建立並推送（public）。

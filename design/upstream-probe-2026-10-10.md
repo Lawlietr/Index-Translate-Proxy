@@ -129,12 +129,39 @@ UA 相關結論先做 self-check：用 httpbin 回憶標頭，證明 `node:https
 | 3 行編號句 | `system`（自寫的翻譯指令）+ `target_translation:"Chinese"` | 3 | **3** ✅ | 逐行譯文 |
 | 40 行編號句 | 同上 | 40 | **40** ✅ | 逐行譯文，不黏行 |
 
-結論：**行對應不是端點的保證，是提示的形状決定的**。上面 §1 那些 18/18、34/34、51/51 都带了
+結論：**行對應不是端點的保證，是提示的形狀決定的**。上面 §1 那些 18/18、34/34、51/51 都帶了
 `system` + `source_language`/`target_translation`；去掉指令後同一個端點就不逐行回。
 
-邊界（誰該做什麼）：插件本來就帶自己的提示模板（所以上面第二行那種輸入在真實流量裡少见），
+邊界（誰該做什麼）：插件本來就帶自己的提示模板（所以上面第二行那種輸入在真實流量裡少見），
 本代理也不注入 prompt 文字（規則 9）→ 這件事修不了，只能：（a）不讓它更糟（不重編編號、不黏行、
 按原分隔接回），（b）用 `x-proxy-chunk-lines` 把「邊側幾行」暴露出來，（c）在 README 寫清楚。
+
+## 8. 致命的第四輪：**從 Cloudflare 出口打上游，一律 412**（已部署後實測）
+
+`wrangler deploy` 上線後跑 `scripts/probe-live.mjs`：本地 miniflare 19/19，**線上只有 9/19**，
+所有碰到上游的檢查都是 412。這不是腳本問題，是**路徑問題**。用一個一次性探測 worker
+（`itp-ua-probe`，已刪）直接對上游發請求：
+
+| 從 Worker 出口發的請求 | 結果 |
+|---|---|
+| `GET /v1/models`（不動 UA） | **412**，33–186ms，body 是 bilibili 的簡體擋封頁（`server: cloudflare`、`cf-cache-status: DYNAMIC`） |
+| 自訂 token UA / 瀏覽器 UA | **412**（同上） |
+| `GET /`、`POST /v1/chat/completions`、走明文 `http://` | **412** |
+| `www.bilibili.com/`（對照，同一個站的根） | **412** |
+| `api.ipify.org`（對照，非 bilibili） | **200**，出口是 `2a06:98c0:3600::103`（CF AS13335 的 IPv6） |
+| `fetch` + `cf.resolveOverride` → `103.151.151.133`（bilibili 自家 CDN IP） | **412** |
+| `cloudflare:sockets` 直連 `103.151.151.4/133/134:443`（帶 SNI/Host）與 `:80` | 連得上但**零位元組回應**（不是可用的路徑） |
+
+判讀：擋下來的是 **Cloudflare 邊緣的 bot 過濾**，條件是**出口 IP 的等級**（CF 自家 datacenter 段），
+**不是 UA**——UA 在本地能決定 200/412（§2），在 CF 出口則全被擋。
+上游無 AAAA（只 A 記錄），所以不是 IPv6 的問題。
+
+**這動到專案的立論**：AGENTS 的第一段說「上游 WAF 擋特定機器人 UA，所以非瀏覽器的 client 需要一個
+固定 UA 的出口」——這句話在**本機**成立（官方那個 `call_api.py --serve` 就是這個用途），
+但**以 Cloudflare Worker 作為出口不成立**。可行的出路（未測）：
+（a）Cloudflare Network egress／WARP connector 把出口換成 AS9009 的 IP；
+（b）中转放在非 CF 出口（自有機器／隧道），Worker 只做鑑權＋切塊＋組包；
+（c）請上游白名單 CF 出口。選 (a) 前要確認 Zero Trust 有 seat 與 token 權限（本輪那兩個 API 回 403）。
 
 ## 未證明（下一輪再補，成本都不高）
 
@@ -142,5 +169,5 @@ UA 相關結論先做 self-check：用 httpbin 回憶標頭，證明 `node:https
 2. 429 的真實 fixture：要把 token 堆到 60k/min 才會觸發（估計要 ~25 個 2,400 字元請求在一分鐘內）。
 3. 其他語言方向的膨脹比：只測了 zh→en；`en→zh`、`ja→zh` 的 output/input 比例可能差很多，
    直接影響 `MAX_INPUT_CHARS` 的邊界（對繁體中文→中文這種不翻譯的情況還沒看過）。
-4. 從 Cloudflare edge 打上游的實際延遲（規則 13，要部署後測）。
+4. ~~從 Cloudflare edge 打上游的實際延遲~~ → 已測：**打不到**（§8，412）。要改成「换出口後能不能打到」。
 5. 上游是否會因 `max_tokens:4096` 這類注入而改變其他行為（只測過 2,512 tokens 的成功案例）。

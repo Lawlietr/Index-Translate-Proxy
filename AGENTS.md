@@ -14,6 +14,10 @@
 存在的理由是上游的 **WAF**：特定機器人 UA 會被 412 擋（見下表），所以瀏覽器以外的 client（插件的背景腳本、
 其他 server 端工具）需要一個固定 UA 的出口。除此之外它是**薄代理**——不改 prompt、不換模型、不做快取。
 
+> ⚠️ **2026-10-10 部署後實測**：上面這段在**本機**成立，但**以 Cloudflare Worker 作為出口不成立**——從 Worker
+> 出口打上游一律 412（下表「出口可達性」列）。已完成的部分（協定、鑑權、切塊、組包、測試）都可用，
+> 但**要先解決出口**才算能用。選項與證據：`design/upstream-probe-2026-10-10.md` §8。
+
 **License: MIT.**（上游是 Apache-2.0，無傳染性；規則 10 講清楚邊界。）
 
 ## 上游事實（公網端點實測，非推測）
@@ -38,7 +42,8 @@
 | 未知模型 | 回 **400**（不是 404），body 用 `detail` 欄位而**不是** OpenAI 的 `error` 形狀，內容自報白名單：`Index-Translate-35B-A3B, index-mt-2b, index-mt-9b, index-mt-2b-syllable, index-mt-9b-syllable`。回顯的 `model` **不可信**：`index-mt-9b` → 200 且回 `qwen35-9b-6624275-iter999`（內部部署名）；`Index-Translate-35B-A3B-preview` → 200 但回 `Index-Translate-35B-A3B`（**靜默退回**）；`model:""` → 靜默用 35B-A3B；已撤回的 `index-homura-*` → 400〔2026-10-10〕 |
 | 逾時 | 非串流且輸出超過 **10.0s** → 上游回 **HTTP 504**（openresty）。**SSE 是真增量**：TTFT 170–1,020ms 且**與輸入長度無關**；生成 2,000 tokens 要 16s、2,512 tokens 要 35.7s → 強制串流是必須的（規則 3）〔2026-10-10〕 |
 | **輸出上限** | 截斷發生在**輸出側**：預設完成上限 **2,048 tokens**，用完就停並回 **`finish_reason:"length"`**（所以丟尾**可偵測**）。同一份 zh→en 測試文本：輸入 ≤2,400 字元（41 行）完整；≥2,600 字元只回 42 行，且 3,000/4,000/6,000 三者的輸出完全同長。`max_tokens` **被精確尊重**（要 40 就停 40）；`max_tokens:4096` 下 3,040 字元完整譯完（51/51 行、2,512 tokens）；`max_tokens:8192` 停在恰好 4,096 → **推定上游把 max_tokens 鉗在 4,096**（未證實）。zh→en 膨脹比 ≈ 0.83 completion tokens／輸入字元。**舊說法「輸入 4,000 字元會截斷」不成立**〔2026-10-10〕 |
-| 可達性 | `index-translate.bilibili.com` CNAME → `bilicdn1.com`（海外節點 `103.151.151.x`，`x-cache-webcdn: BYPASS`）→ 不是只在中國大陸可達；但**從 CF edge 的實際延遲未測**〔2026-10-08〕 |
+| 可達性 | `index-translate.bilibili.com` CNAME → `bilicdn1.com`（海外節點 `103.151.151.x`，`x-cache-webcdn: BYPASS`）→ 不是只在中國大陸可達〔2026-10-08〕 |
+| **出口可達性（致命）** | **從 Worker 出口打上游，全部 412**：任意路徑／方法／UA（含瀏覽器 UA、不設 UA）、走 `http://` 也一樣，`www.bilibili.com/` 同樣 412，而 `api.ipify.org` 正常 200（出口 `2a06:98c0:…`，AS13335）。擋下來的是 **CF 邊緣的 bot 過濾**，條件是出口 IP 的等級，**不是 UA**（UA 在本地能決定 200/412，見上表）。`cf.resolveOverride` 與 `cloudflare:sockets` 直連 bilicdn IP 都不可用（前者仍 412、後者零位元組回應）。上游無 AAAA → 不是 IPv6 問題。出路（未測）：WARP egress／非 CF 中转／上游白名單〔2026-10-10，design/upstream-probe §8〕 |
 | 配額 | **有**：`60,000 tokens/min` **per IP**，超出回 **429** + `retry-after: 1`，body 為 `{"error":{"type":"rate_limit_error","code":429,"retry_after":1,…}}`（此形狀為早間實測；同日第二輪堆到 20k tokens/90s 與 36k tokens 併發都**未再觸發 429**，也無配額查詢端點）。**併發不增加吞吐**：10 個併發請求全部成功但總時間 21.9s → 47.8s（≈5 倍），上游近乎串行 → 本地並發上限是必要的（規則 7）。免費、不需金鑰、無 SLA；bilibili 會撤回模型名稱（`index-homura-*` 先例）〔2026-10-10〕 |
 
 模型可用性的三層證據（declared / 被網關接受但未宣告 / 已撤回）原本在**未公開的姐妹專案**
