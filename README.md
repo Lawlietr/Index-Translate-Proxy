@@ -66,7 +66,7 @@ curl -s -X POST "$B/v1/chat/completions" -H "Authorization: Bearer $KEY" -H "con
         {"role":"user","content":"1. The meeting starts at nine.\n2. Please bring the report."}]}'
 # → {"choices":[{"message":{"content":"1. 會議九點開始。\n2. 請把報告帶來。"},"finish_reason":"stop"}]}
 
-# 不带 key：應該要看到 401（代表門有在）
+# 不帶 key：應該要看到 401（代表門有在）
 curl -s -w "\nHTTP %{http_code}\n" -X POST "$B/v1/chat/completions" -H "content-type: application/json" \
   -d '{"model":"Index-Translate-35B-A3B","messages":[{"role":"user","content":"1. Hi."}]}'
 # → 401 {"error":{"message":"未提供 API Key…","type":"authentication_error"}}
