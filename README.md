@@ -56,22 +56,30 @@ GitHub 只是公開鏡像；主要開發在自建 Forgejo，issue／PR 請到主
 
 ## 設定
 
-| | 名稱 | 預設 | 說明 |
-|---|---|---|---|
-| **必填** | `ITP_KEY` | — | 通行碼（Secret）。沒設定 → 所有請求 503，不會變成公開端點 |
-| 選填 | `MAX_INFLIGHT` | `4` | 同時在途的請求數（單實例）。閘滿先排隊，等不到才 429 |
-| 選填 | `SLOT_WAIT_MS` | `15000` | 排隊的最久時間 |
-| 選填 | `MAX_INPUT_CHARS` | `2500` | 切塊大小（上游的截斷在輸出側，這個值是保守邊界） |
-| 選填 | `MAX_LINE_CHARS` | `2000` | 單行上限（只在行界切塊，單行超長只能 413 並說明繞法） |
-| 選填 | `MAX_TOKENS_DEFAULT` | `4096` | 客戶端沒帶 `max_tokens` 時補的值（上游預設 2,048 會截尾） |
-| 選填 | `MAX_BODY_BYTES` | `16384` | 單塊 body 上限，超過 → 413 |
+**必填只有一個**：`ITP_KEY`（Secret）——你自己產生的一串字，就是插件裡填的 API Key。
+沒設定 → 所有請求 503（不會變成公開端點）。**其他全都有預設值，不調也能跑。**
 
-選填全部不調也能跑。**插件端建議把「每秒最大請求數」設 3~5** —— 並發閘在 Vercel／CF 都是 per-instance，
-真正的保護在 client 端。
+<details>
+<summary>選填的微調項（一般不用動）</summary>
+
+| 名稱 | 預設 | 什麼時候需要調 |
+|---|---|---|
+| `MAX_INFLIGHT` | `4` | 你有多個人共用這個部署，或插件的並發設得比較高 |
+| `SLOT_WAIT_MS` | `15000` | 排隊等不到就 429；想更早放手或多等一會兒 |
+| `MAX_INPUT_CHARS` | `2500` | 切塊大小（上游的截斷在輸出側，這個值是保守邊界） |
+| `MAX_LINE_CHARS` | `2000` | 單行超長會 413；只在行界切塊，所以這個值是單行上限 |
+| `MAX_TOKENS_DEFAULT` | `4096` | 客戶端沒帶 `max_tokens` 時補的值（上游預設 2,048 會截尾） |
+| `MAX_BODY_BYTES` | `16384` | 單塊 body 上限，超過 → 413 |
+
+要調就在 Vercel 的 Environment Variables 加同名變數，改完重新部署生效。
+
+</details>
+
+**插件端建議把「每秒最大請求數」設 3~5** —— 並發閘在 Vercel／CF 都是 per-instance，真正的保護在 client 端。
 
 代理只會補這四項**協定層**參數（你的 prompt 一律不改，規則 9）：`stream: true`、`stream_options.include_usage`、
-`chat_template_kwargs.enable_thinking:false`、`max_tokens`（你帶了就不動）。
-理由逐項在 [`design/why-proxy.md`](design/why-proxy.md) 與 [`design/streaming-and-chunking.md`](design/streaming-and-chunking.md)。
+`chat_template_kwargs.enable_thinking:false`、`max_tokens`（你帶了就不動）。理由在
+[`design/why-proxy.md`](design/why-proxy.md) 與 [`design/streaming-and-chunking.md`](design/streaming-and-chunking.md)。
 
 ## 快速驗證（curl）
 
