@@ -38,6 +38,8 @@
 
 ## 快速開始
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FLawlietr%2FIndex-Translate-Proxy&project-name=index-translate-proxy&repository-name=index-translate-proxy&env=ITP_KEY&envDescription=%E4%BD%BF%E7%94%A8%E8%80%85%E5%85%B1%E7%94%A8%E7%9A%84%E9%91%91%E6%AC%8A%20key%EF%BC%8C%E8%87%AA%E8%A8%82%E4%B8%80%E4%B8%B2%EF%BC%88openssl%20rand%20-hex%2032%EF%BC%89&envLink=https%3A%2F%2Fgithub.com%2FLawlietr%2FIndex-Translate-Proxy%2Fblob%2Fmain%2F.dev.vars.example)
+
 自己部署（**Vercel**，現行主入口）：
 
 ```bash

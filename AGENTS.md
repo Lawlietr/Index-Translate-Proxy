@@ -125,6 +125,15 @@
     文件可以提，但首次提到要標「未公開」，而且**引用過的事實要在本 repo 留下自己的實測證據**，
     不然是無法查證的引用。
 
+16. **一份協定碼、兩個入口：**協定邏輯只存在 `src/lib/`，入口只做平台橋──`api/index.js`（Vercel
+    Edge runtime，**現行主入口**：原生 `Response`、不寫 `module.exports`、不用 Node API）、
+    `src/worker.js`（CF Worker，因出口 412 暫不啟用）、`api/probe.js`（一次性探測）。
+    新增入口不得複製協定碼，只准接環境差異（變數讀取、URL 前綴、標頭），並為橋接本身寫測試
+    （`tests/vercel-bridge.test.mjs`）。**入口用 Edge runtime 不是風格選擇，是 constraint**：
+    Vercel 的 Node/serverless runtime 會把 SSE 緩衝（純 SSE 探測函式亦復如此），而規則 3 要靠真串流
+    避開上游 10s 的 504；Edge 的限制是「25s 內開始回、可串流到 300s」，上游 TTFT 0.2–1.0s 因此余裕很大。
+    `src/lib/vercel-node-adapter.js`（Node 版）留著但不部署──它是那場誤判的標本。
+
 ## 待辦
 
 見 [`TODO.md`](TODO.md)（規則 14：待辦只在那一處）。

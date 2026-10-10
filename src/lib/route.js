@@ -32,7 +32,7 @@ export function resolvePathname(pathname) {
   if (UPSTREAM_PATHS.has(p)) return { kind: "upstream", path: p }
 
   // 客戶端把 base 填成根網址（沒有 /v1）時會打 /chat/completions 這種形状：
-  // 只有能对上上游白名單才补前綴，其他仍一律本地 404（規則 5：已帶 /v1 絕不補）。
+  // 只有能对上上游白名單才補前綴，其他仍一律本地 404（規則 5：已帶 /v1 絕不補）。
   if (!p.startsWith("/v1")) {
     const candidate = `/v1${p}`
     if (UPSTREAM_PATHS.has(candidate)) return { kind: "upstream", path: candidate }

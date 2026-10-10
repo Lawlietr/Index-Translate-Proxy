@@ -44,7 +44,7 @@ const frame = (content, finish = null) =>
     choices: [{ index: 0, delta: { content }, finish_reason: finish }],
   })}\n\n`
 
-/** 會慢慢吐的假上游：用来验「首塊先到」這種時序。 */
+/** 會慢慢吐的假上游：用來驗「首塊先到」這種時序。 */
 function slowUpstream(parts, gapMs = 60) {
   upstream = async () =>
     new Response(

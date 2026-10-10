@@ -1,4 +1,4 @@
-// Vercel **Node runtime** 的平台橋（备用入口，不是线上那个）。
+// Vercel **Node runtime** 的平台橋（備用入口，不是線上那個）。
 // 線上入口是 api/index.js（Edge runtime，原生串流）。為什麼不用 Node：2026-10-10 實測
 // Vercel 的 Node 函式會把 SSE **整批緩衝**後才送到客戶端（72 個塊在同一瞬間抵達），
 // 而 Edge runtime 是真增量。證據與討論見 design/egress-options.md。

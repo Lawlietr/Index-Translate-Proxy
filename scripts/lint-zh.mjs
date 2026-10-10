@@ -13,9 +13,12 @@ const BAD = new Set([
   "请", "说", "过", "进", "达", "维", "运", "输", "闭", "闻", "适", "严",
   "复", "错", "简", "单", "样", "标", "拟", "检", "据", "当", "尽", "号",
   "与", "写", "会", "无", "独", "医", "肃", "显", "气", "产", "众", "丰",
+  // 2026-10-10 补：这些字形只在简体出现，且都是我们自己写错的实例（来／暂／缓／冲／个／并／档）。
+  "来", "暂", "缓", "冲", "组", "负", "载", "响", "讯", "极", "顶", "属",
+  "异", "弃", "补", "续", "个", "并", "档",
 ])
 
-const roots = process.argv.slice(2).length ? process.argv.slice(2) : ["src", "scripts", "tests", "design", "README.md", "AGENTS.md", "TODO.md"]
+const roots = process.argv.slice(2).length ? process.argv.slice(2) : ["src", "api", "scripts", "tests", "design", "README.md", "AGENTS.md", "TODO.md"]
 // tests/fixtures 是上游回的具體內容（簡體），不是我們寫的文字 → 不掃。
 const SKIP_DIRS = new Set(["node_modules", ".git", "tmp", ".wrangler", ".forgejo", "results", "fixtures"])
 const EXT = new Set([".js", ".mjs", ".md", ".toml", ".json"])

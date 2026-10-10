@@ -1,6 +1,17 @@
-# design/deploy-button.md — 「Deploy to Cloudflare」一鍵按鈕
+# design/deploy-button.md — 一鍵部署按鈕（Vercel 為主、CF 為附）
 
-狀態：**建議做，但有前置條件**（2026-10-10 查證，CF 文件最後更新 2026-07-22）。
+狀態：**Vercel 按鈕已放進 README（2026-10-10）；CF 按鈕暫不放大**——從 CF 出口打上游會 412
+（`egress-options.md`），部署出來的實例打不到上游，按了卻不能用比沒按鈕更糟。
+
+```markdown
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FLawlietr%2FIndex-Translate-Proxy&project-name=index-translate-proxy&repository-name=index-translate-proxy&env=ITP_KEY&envDescription=...&envLink=.../.dev.vars.example)
+```
+
+- `env=ITP_KEY` 讓流程**提示使用者填 key**，對應 [`auth.md`](auth.md)：他填什麼，插件的 API Key 欄位就填同一串。
+- 專案沒有構建步驟，`vercel.json` 的 `{"functions":{"api/**/*.js":{"runtime":"edge"}}}` 就是全部設定
+  （Edge runtime 的必要性見 AGENTS 規則 16）。
+- 放按鈕的前置與 CF 那段（鏡像、public repo、`namespace_id` 固定值、退路三行）仍適用：
+  CF 那側等出口解決後再放。
 
 ## 它是什麼
 
