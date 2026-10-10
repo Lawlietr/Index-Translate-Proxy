@@ -9,7 +9,7 @@
 |---|---|
 | 上游有 **60,000 tokens/min per IP**，超限回 `429` + `retry-after: 1`，body 為 `{"error":{"type":"rate_limit_error","code":429,"retry_after":1,…}}` | 2026-10-10 實測公網端點 |
 | Worker 到上游的 egress IP 是共用池 → **所有使用者共用同一份上游配額** | CF 的性質；尚未從 worker 實測（TODO：探測） |
-| CF 免費層 100k 請求/天 | 匿名公開的 worker 會被陌生人掃到失效 |
+| CF 免費層 100k 請求/天 | Cloudflare 定價頁；匿名公開的 worker 會被陌生人掃到而耗盡這個額度 |
 
 結論：**鑑權是這份配額唯一的門。**
 
@@ -21,7 +21,7 @@
    日誌只記 `auth: ok | missing | invalid`。
 3. **讀取順序**：`Authorization: Bearer <key>` → 退回 `x-api-key`。**不**支援 query／path 帶 key
    （會留在瀏覽器歷史與 CF 日誌，也可能被 Referer 帶走）。
-4. **固定流程順序**（順序错錯會踩坑）：
+4. **固定流程順序**（順序錯了會踩坑）：
 
    ```
    OPTIONS 預檢 → 不鑑權，回 204 + Access-Control-Allow-Headers: authorization, content-type
@@ -30,12 +30,12 @@
      ↓
    規則 7 的並發閘
      ↓
-   切塊（規則 4）／强制串流（規則 3）／轉發上游
+   切塊（規則 4）／強制串流（規則 3）／轉發上游
    ```
 
    `Access-Control-Allow-Headers` 少了 `authorization` 時，插件只會報 CORS 失敗，不會告訴你原因。
    上游自己回的 `access-control-allow-origin: *` 救不了我們這一層（規則 8 的標頭政策不影響這裡）。
-5. **401 必須是 OpenAI 錯誤形狀**，否則插件只显示「請求失敗」無從除錯：
+5. **401 必須是 OpenAI 錯誤形狀**，否則插件只顯示「請求失敗」，無從除錯：
 
    ```json
    {"error":{"message":"未提供 API Key：請在插件的 API Key 欄位填入本代理的 key","type":"authentication_error","code":401}}
@@ -56,7 +56,7 @@
    ```
 
    key 用 `request.headers.get("cf-connecting-ip")`；不可用時退回 `request.ip`。
-   `success: false` → 回 429 + `Retry-After: 60`（同样 OpenAI 錯誤形狀）。
+   `success: false` → 回 429 + `Retry-After: 60`（同樣的 OpenAI 錯誤形狀）。
 7. **規則 8 不變**：驗完即丟，絕不轉發 `Authorization`／`x-api-key`／`cookie`／CF `x-*` 給上游
    （上游不需鑑權，填的 key 對上游無意義）。README 要明寫「這個 key 是我們的門，不是上游的」。
 
@@ -80,9 +80,9 @@ hint 建議使用者把插件的「每秒最大請求數」降到 2~3。是否�
 | KV／D1 存 key 與使用統計 | 一把共用 key 不需要存儲；免費層 KV 寫入 1k/天也不夠做 token 計數 |
 | 多把 key（per-device） | 自用量小，只增加維護成本；若之後要區分裝置再改 |
 
-## 連動要改的地方
+## 連動
 
-- `AGENTS.md`：規則 8 補充「本地必須驗證 `Authorization`」；規則 13 的探測清單加 401／429 兩條。
-- `README.md`：「API Key｜任填」那一列改成「填本代理的 key」（不然是誤導）。
-- 新增 `.dev.vars.example`（內容只有 `ITP_KEY=`）——它同時是本機開發的範本與
-  「Deploy to Cloudflare」按鈕的必填檔案，見 [`deploy-button.md`](deploy-button.md)。
+- `AGENTS.md`：規則 8（先鑑權、key 不進上游）與規則 13（探測清單加 401／429）**已改**。
+- 尚未做的兩項列在 [`../TODO.md`](../TODO.md)：README 的「API Key｜任填」要改成「填本代理的 key」，
+  以及新增 `.dev.vars.example`（只有 `ITP_KEY=`）——後者同時是「Deploy to Cloudflare」按鈕的必填檔案，
+  見 [`deploy-button.md`](deploy-button.md)。本檔不重複它們的細節。

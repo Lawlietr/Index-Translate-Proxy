@@ -20,7 +20,7 @@ Secrets 由 repo 裡的 `.dev.vars.example`（dotenv 格式）宣告，按鈕流
 | 文件的限制 | 對本 repo 的意義 |
 |---|---|
 | **只支援 github.com 與 gitlab.com；self-hosted 的 GitHub／GitLab 不支援** | 我們的 `origin` 是自建 Forgejo（`ssh://fg/lawliet/…`）→ **必須先有公開鏡像**，按鈕才可用 |
-| repo 必須是 public | 鏡像要公開；MIT 授權無衝突 |
+| repo 必須是 public | ✓ 鏡像已 public（2026-10-10 在 GitHub 頁面確認，Resources 顯示 MIT license） |
 | 只支援 Workers 應用（不支援 Pages） | 我們就是純 Worker ✓ |
 | monorepo 支援不完整，子目錄要完全自閉 | 我們是單一 Worker、repo 根就是專案 ✓ |
 
@@ -31,27 +31,27 @@ Secrets 由 repo 裡的 `.dev.vars.example`（dotenv 格式）宣告，按鈕流
 
 ## 建議做法
 
-1. **做**，但排在 `src/` 與鑑權之後（TODO 的順序），因為按了卻跑出 404 的 worker 比沒按鈕更糟。
-2. 鏡像到 **GitHub 公開 repo**（Forgejo 自帶 mirror push 設定即可）。`origin` 仍以自建 Forgejo 為主，
-   CI 照規則 12 留在 `.forgejo/workflows/`；README 註明「GitHub 只是鏡像，issue 請到主 repo」。
-3. README 放兩條路，不要只放按鈕：
+1. **做**，但排在 `src/` 與鑑權之後（[`../TODO.md`](../TODO.md) 待做 9），因為按了卻跑出 404 的 worker
+   比沒按鈕更糟。
+2. README 放兩條路，不要只放按鈕：
    - **按鈕**：要自己一份的人（自備 Cloudflare 帳號）。
    - **三行手動**：`git clone` → 填 `.dev.vars`（`ITP_KEY`）→ `npx wrangler deploy`。
      給不想把 repo 放到 GitHub 的人，也是按鈕失敗時的退路。
-4. 別把按鈕當成主要入口：本專案對**插件使用者**的答案是我們自己那份公開 worker（填網址就能用）；
+3. 別把按鈕當成主要入口：本專案對**插件使用者**的答案是我們自己那份公開 worker（填網址就能用）；
    按鈕服務的是「想自己掌控一份」的開發者。README 的章節順序照這個優先級排。
 
-## 鏡像（已定，2026-10-10）
+## 鏡像（已建，2026-10-10）
 
 - 主 repo：自建 Forgejo（`ssh://fg/lawliet/Index-Translate-Proxy.git`，remote 名 `origin`）。
-- 公開鏡像：`git@github.com:Lawlietr/Index-Translate-Proxy.git`（remote 名 `github`）。
-  本機已驗證可讀寫（`ssh -T git@github.com` → Lawlietr；`git ls-remote` 通過且該 repo 現為空）。
-- 推播：`git push origin main && git push github main`，或改用 Forgejo 自帶的 mirror push 自動同步。
-- **按鈕能用的硬條件**：GitHub 那份必須是 public。若維持 private，按鈕會打不開，README 就別放。
-- README 要註明：GitHub 只是鏡像，issue／PR 請到主 repo；CI 照規則 12 只在 `.forgejo/workflows/`，
-  GitHub 那邊不要建 Actions。
+- 公開鏡像：`git@github.com:Lawlietr/Index-Translate-Proxy.git`（remote 名 `github`），已推送、已 public，
+  分支 `main` 與 origin 同步。推播目前用手動 `git push origin main && git push github main`；
+  要不要改由 Forgejo 的 mirror push 自動同步＝未決定。
+- CI 照規則 12 只在 `.forgejo/workflows/`，GitHub 那邊不建 Actions；README 要註明
+  「GitHub 只是鏡像，issue／PR 請到主 repo」（規則 15：這是對外文件，故不寫內網 URL）。
 
-## 待決定
+## 剩餘前置（都在我們這邊）
 
-- GitHub 那份要不要設為 public（開按鈕的硬條件）。
-- 按鈕何時放進 README（建議等 `src/` 與鑑權可用後，TODO 10）。
+1. `wrangler.toml` 的 `main = "src/worker.js"` 目前是註解掉的 → 要有程式碼才開按鈕（與規則 12 同一道理）。
+2. `[[ratelimits]]` 的 `namespace_id` 用固定值 `1001`（`auth.md` 已定），別人的帳號才能一鍵部署。
+3. repo 裡要有 `.dev.vars.example`（`ITP_KEY=`），按鈕流程才會提示填寫。
+4. 按鈕何時放進 README：等 `src/` 與鑑權可用後（TODO 待做 9）。
