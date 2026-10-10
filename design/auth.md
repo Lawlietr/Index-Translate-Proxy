@@ -5,18 +5,21 @@
 
 ## 為什麼必須有 key（不是裝飾）
 
+這個代理是**自己部署、自己用**的：沒有公共實例，也沒有共用示範 key。但那不代表可以省掉鑑權——
+
 | 事實 | 來源 |
 |---|---|
 | 上游有 **60,000 tokens/min per IP**，超限回 `429` + `retry-after: 1`，body 為 `{"error":{"type":"rate_limit_error","code":429,"retry_after":1,…}}` | 2026-10-10 實測公網端點 |
-| Worker 到上游的 egress IP 是共用池 → **所有使用者共用同一份上游配額** | CF 的性質；尚未從 worker 實測（TODO：探測） |
-| CF 免費層 100k 請求/天 | Cloudflare 定價頁；匿名公開的 worker 會被陌生人掃到而耗盡這個額度 |
+| 雲端函式的出口 IP 是**共用池**（Vercel／CF 皆然）→ 你的實例花的正是那份 per-IP 配額，而那個 IP 不是只有你在用 | 平台性質；Vercel 側已實測 429 的形狀與 `retry-after` |
+| 網址一旦外洩，陌生人掃到就是**免費用你的配額**（還可能掃爆函式額度） | 匿名公開端點的常見結果；`GET /` 自報設定，更容易被認出來 |
 
-結論：**鑑權是這份配額唯一的門。**
+結論：**key 是這份配額唯一的門。** 它不是上遊的 key（上游不需鑑權），纯粹是你给自己的部署装的一道門。
 
 ## 定案
 
-1. **單一共用 key**（2026-10-10 決定）。存 `wrangler secret put ITP_KEY`，不做多 key、不用 KV／D1 存 key。
-   撤銷＝換一把並重設 secret（`openssl rand -hex 24`，建議加前綴 `itp_`）。
+1. **一份部署一把 key**（2026-10-10 定案；不做多租戶）。存 `wrangler secret put ITP_KEY`，Vercel 則放
+   Environment Variables；不做多 key、不用 KV／D1 存 key。撤銷＝換一把並重設（`openssl rand -hex 32`）。
+   **不要把實際用的 key 寫進 README 或任何公開文件**——這份文件曾放過一把示範 key，已輪換作廢。
 2. **比對用 SHA-256 hex**，不逐字元比較明文（避免時序側信道，也保證日誌不會出現 key）。
    日誌只記 `auth: ok | missing | invalid`。
 3. **讀取順序**：`Authorization: Bearer <key>` → 退回 `x-api-key`。**不**支援 query／path 帶 key

@@ -1,6 +1,7 @@
 # AGENTS.md — Index-Translate-Proxy
 
-> **狀態：已實裝並已上線。主入口 `https://index-translate-proxy.vercel.app`，線上探測 `probe-live` 21 ok / 0 fail / 1 skip**
+> **狀態：已實裝並已上線。那是**我自己用的部署**（`https://index-translate-proxy.vercel.app`，不是公共實例、
+> 不對外發 key）；線上探測 `probe-live` 21 ok / 0 fail / 1 skip**
 > （跳過的是 per-instance 併發閘，平台上不可測），`probe-sse-timing` 兩側真增量。放行清單（規則 1）也已線上驗證
 > （含「`index-mt-9b` 經本代理真的能翻」與「`-syllable` 被擋」兩項）。
 > 一份協定碼、兩個入口：`api/index.js`（Vercel Edge runtime，**現行主入口**）與
@@ -100,7 +101,7 @@
    **但這個閘在兩個平台都是 per-instance**（2026-10-10 線上實測：Vercel 把 12 個併發分散到 6+ 個實例，一個都不擋；
    線上探測因此對這一項只驗證 429 的**形狀**，不宣稱全域保護）。真的全域閘需 Durable Objects（CF）或外部計數
    （Vercel，付費）→ v1 不做了，所以**規則 7 是盡力而為的保護，主要防線仍是插件端的並發設定**。
-8. **先鑑權，再轉發；key 不進上游。** worker 必須先驗證**共用的 `ITP_KEY`**（讀 `Authorization: Bearer`，
+8. **先鑑權，再轉發；key 不進上游。** worker 必須先驗證**這一份部署的 `ITP_KEY`**（讀 `Authorization: Bearer`，
    退回 `x-api-key`；設計與錯誤形狀見 `design/auth.md`）。**沒有 `ITP_KEY` 就一律回 503**——這個代理是
    給自己部署、自己用的，不做匿名公開端點。鑑權在**任何上游請求之前**完成，401 不消耗上游配額；
    **驗完即丟**——不轉發 `Authorization`、`x-api-key`、`cookie`、CF 的 `x-*` 標頭，對上游只帶
@@ -147,6 +148,8 @@
 
 ## 刻意不做
 
+- **公共共用實例與示範 key**：本專案的用途就是讓使用者自己部署一份自己用。README 不給「拿來就用」的網址，
+  也不公開實際的 key（公開過的那把已輪換作廢）。
 - KV / Cache 快取（免費層寫入配額低，翻譯請求重複率低）。
 - DeepL／其他協定的適配層——只做 OpenAI 相容這一條。
 - 上游健康檢查或模型探測（`/v1/models` 查不出未宣告模型的可用性，白花一次請求；姐妹專案規則 12 同一結論）。
