@@ -1,8 +1,10 @@
 # AGENTS.md — Index-Translate-Proxy
 
-> **狀態：骨架。** 只有 `package.json`、`wrangler.toml`、`.gitignore`、`LICENSE`、`README.md`、`TODO.md`、
-> `design/`（四份設計檔：鑑權、部署按鈕、切塊／串流、上游探測紀錄）與本檔。`src/` 與測試**尚未建立**（`tests/fixtures/` 只有探測證據，不是測試），因此 `npm run dev`／`npm run deploy`／CI 都還不存在。
-> 本檔的規則是實作時的約束，不是已實裝的行為描述。
+> **狀態：第一版已實裝（本地驗證完），尚未部署。** `src/worker.js` + `src/lib/{route,headers,auth,model,chunk,stream,limits}.js`、
+> `tests/*.test.mjs`（67 條離線）、`scripts/{smoke-local,probe-live,probe-upstream,lint-zh}.mjs` 都在。
+> 本地 `wrangler dev`（miniflare，打真上游）通過 `probe-live` 的 19 項——**但那不是線上**：
+> 規則 13 要求的「打真的 worker」還沒跑，因為還沒 `wrangler deploy`。本檔的規則是實作的約束，
+> 不是已上線行為的宣傳。
 
 ## Project Overview
 
@@ -30,7 +32,9 @@
 | 多送的欄位 | `n`、`stop`、`presence_penalty`、`frequency_penalty`、`seed`、`user` 與 `Authorization: Bearer <任意字串>` 均可被上游接受（200）→ 純轉發可行〔2026-10-08〕 |
 | `usage` | 串流**預設不給**；帶 `stream_options:{include_usage:true}` 就有（含 `prompt_tokens_details.cached_tokens`）；非串流有 → 代理強制串流時要自己補這個參數才拿得到用量〔2026-10-10〕 |
 | 字元→token | 比例依文本變動大，**不可用字元換算**：本輪 6,047 字元 → 3,901 prompt tokens（0.65）、2,400 → 1,584（0.66）；早間另一文本 3,800 → 3,644（0.96）〔2026-10-10〕 |
-| 編號批次 | 三行一次送（`1. …\n2. …\n3. …`）→ 上游保留編號 → 插件的行對應協定可用〔2026-10-08〕 |
+| 行對應 | 帶翻譯指令（`system` 或 `source_language`/`target_translation`）時：編號行會**逐行**回傳（18/18、34/34、51/51 都對過）。
+  **只送編號句不帶指令**時不成立：上游會加前言並把每句展開成多語言列表（3 行→8 行、40 行→7 行），
+  或只給一行「好的，請提供需要翻譯的文本。」→ 行對應是**提示條件式**的，不是端點保證〔2026-10-08、2026-10-10〕 |
 | 未知模型 | 回 **400**（不是 404），body 用 `detail` 欄位而**不是** OpenAI 的 `error` 形狀，內容自報白名單：`Index-Translate-35B-A3B, index-mt-2b, index-mt-9b, index-mt-2b-syllable, index-mt-9b-syllable`。回顯的 `model` **不可信**：`index-mt-9b` → 200 且回 `qwen35-9b-6624275-iter999`（內部部署名）；`Index-Translate-35B-A3B-preview` → 200 但回 `Index-Translate-35B-A3B`（**靜默退回**）；`model:""` → 靜默用 35B-A3B；已撤回的 `index-homura-*` → 400〔2026-10-10〕 |
 | 逾時 | 非串流且輸出超過 **10.0s** → 上游回 **HTTP 504**（openresty）。**SSE 是真增量**：TTFT 170–1,020ms 且**與輸入長度無關**；生成 2,000 tokens 要 16s、2,512 tokens 要 35.7s → 強制串流是必須的（規則 3）〔2026-10-10〕 |
 | **輸出上限** | 截斷發生在**輸出側**：預設完成上限 **2,048 tokens**，用完就停並回 **`finish_reason:"length"`**（所以丟尾**可偵測**）。同一份 zh→en 測試文本：輸入 ≤2,400 字元（41 行）完整；≥2,600 字元只回 42 行，且 3,000/4,000/6,000 三者的輸出完全同長。`max_tokens` **被精確尊重**（要 40 就停 40）；`max_tokens:4096` 下 3,040 字元完整譯完（51/51 行、2,512 tokens）；`max_tokens:8192` 停在恰好 4,096 → **推定上游把 max_tokens 鉗在 4,096**（未證實）。zh→en 膨脹比 ≈ 0.83 completion tokens／輸入字元。**舊說法「輸入 4,000 字元會截斷」不成立**〔2026-10-10〕 |
@@ -56,7 +60,8 @@
    理由：非串流超過 10.0s 會被 504 砍。回應加 `x-proxy-upstream-stream: forced`，讓這件事在 devtools 可見。
    跨塊的拼接要插入原分隔字元的 delta；`usage` 上游缺就不帶，不造假數字（細節見 `design/streaming-and-chunking.md`）。
 4. **超長輸入只在行界切塊**，依序送、**按原本的分隔字元接回**。不得切在行內——插件靠編號行把譯文對應回原文，
-   行內切會錯位；只有單行本身超長時才硬切，該處分隔用空字串。代理不重編、不刪編號。
+   行內切會錯位。**單行本身超過 `MAX_LINE_CHARS` 就不切，回 413 並說明怎麼繞過**（不猜、不悄悄改輸入）。
+   代理不重編、不刪編號。
    **上限在輸出側**（預設 2,048 completion tokens），所以切塊大小要按「估計輸出 tokens」算，不是只看輸入字元
    （`design/streaming-and-chunking.md` §1）。**必須檢查 `finish_reason === "length"`**：那是尾部被截掉的唯一訊號，
    出現了就不是正常完成（除非 `max_tokens` 是客戶端自己要的）。
@@ -69,10 +74,11 @@
 6. **上游錯誤不改 status、不改 body**，只在同一回應加 **`x-proxy-hint` 標頭**（我們的建議）。不包層、不重寫成 500、
    不在上游的 JSON 裡塞欄位。要讓**使用者**看到的話就放進我們自己產生錯誤的 `error.message`（OpenAI 客戶端會顯示），
    header 只給 devtools 用——插件不會讀 body 裡的自訂欄位。
-7. **並發有上限**（預設 4，`MAX_INFLIGHT` 可調），超過回 **429 + `Retry-After: 2`**，並建議把插件的
-   「每秒最大請求數」設 3~5。閘門計的是**上游塊**，不是客戶端請求（一個拆三塊的請求佔三個額度）。
-   上游的配額是**按 IP** 的（見上表「配額」列），而 Worker 的 egress IP 是共用池 → 保護只能自己做；
-   上游回的 429 與 `retry-after` 要原樣透傳（規則 6）。
+7. **並發有上限**（預設 4，`MAX_INFLIGHT` 可調）。閘門計的是**同時在途的請求**（一個 request 持有一個 slot，
+   切塊依序送、同時只有一塊在途），不是上游塊；一個拆三塊的請求仍只佔一個 slot，但消耗三次上游配額。
+   閘滿先在**本地排隊**（`SLOT_WAIT_MS`，預設 15 秒），等不到才回 **429 + `Retry-After: 2`**，並建議把插件的
+   「每秒最大請求數」設 3~5。上游的配額是**按 IP** 的（見上表「配額」列），而 Worker 的 egress IP 是共用池 →
+   保護只能自己做；上游回的 429 與 `retry-after` 要原樣透傳（規則 6）。细节在 `design/streaming-and-chunking.md` §2。
 8. **先鑑權，再轉發；key 不進上游。** worker 必須先驗證**共用的 `ITP_KEY`**（讀 `Authorization: Bearer`，
    退回 `x-api-key`；設計與錯誤形狀見 `design/auth.md`）。驗證在**任何上游請求之前**完成，
    401 不消耗上游配額；**驗完即丟**——不轉發 `Authorization`、`x-api-key`、`cookie`、CF 的 `x-*` 標頭，
@@ -87,7 +93,7 @@
     統一授權）。要複用就重寫。
 11. **所有使用者可見文字與程式註解一律繁體中文**（與姐妹專案規則 15 相同）。上游的簡體模板原文照引時標注出處。
 12. **CI 放 `.forgejo/workflows/`，不放 `.github/workflows/`**（`origin` 是自建 Forgejo 15.0.9）。
-    但**先有程式碼才建 CI**——骨架階段加 CI 是假工。
+    程式碼已在，所以 CI 是該補的一項（見 TODO）；但在它之前，**部署與線上探測優先**。
 13. **部署是測試環的一環：**`wrangler deploy` 之後必須用**真的 worker** 跑一次探測，至少覆蓋
     插件的 `/v1` 路徑形狀、UA（腳本 UA 打 worker 不該 412）、未知模型的 400、超長段的切塊接回、
     **拆塊請求中途失敗時的 status 與 `x-proxy-chunk-failed`**、**`GET /` 的一行回應與 `x-proxy-auth`**、

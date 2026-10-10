@@ -83,7 +83,7 @@ UA 相關結論先做 self-check：用 httpbin 回憶標頭，證明 `node:https
 | `index-homura-35b-a3b`（已撤回） | 400 | — |
 | `gpt-4o-mini` | 400 | — |
 
-400 的 body（兩檔相同格式）：`{"detail":"未知模型 '<name>'，公开支持模型: Index-Translate-35B-A3B, index-mt-2b, index-mt-9b, index-mt-2b-syllable, index-mt-9b-syllable"}`
+400 的 body（兩檔相同格式）：`{"detail":"未知模型 '<name>'，公開支持模型: Index-Translate-35B-A3B, index-mt-2b, index-mt-9b, index-mt-2b-syllable, index-mt-9b-syllable"}`
 
 → 回顯值可能是內部部署名，也可能被換成 35B-A3B，**不能拿來驗證跑的是哪個模型**。規則 1 只放行
 `Index-Translate-35B-A3B`、其餘本地 400，這條现在有證據。400 用 `detail` 欄位而不是 OpenAI 的
@@ -117,6 +117,24 @@ UA 相關結論先做 self-check：用 httpbin 回憶標頭，證明 `node:https
   尚未有 429 的 fixture；離線測試先用手抄的真實 body（待做 5）。
 - 單發延遲基線：小請求 TTFT 170–560ms／總 400–770ms；900 字元 173–473ms TTFT／6.0–7.2s 總；
   6,047 字元 TTFT 375–1,019ms／17.9–19.0s。**TTFT 與輸入長度無關** → 真增量再次確認（早間那條結論穩）。
+
+## 7. 行對應是**提示條件式**的（第三輪：打 worker 時發現）
+
+用 `scripts/probe-live.mjs` 打本地 worker（miniflare → 真上游）時，兩項行對應檢查失敗：
+
+| 輸入 | 带了什麼 | 輸入行數 | 回傳行數 | 回傳形狀 |
+|---|---|---|---|---|
+| `1. The cat sleeps.` ×3 | 無 system、無 `target_translation` | 3 | **38** | 「Here are the translations … ### **Spanish** …」：前言 + 每句展開成多語言 |
+| 40 行編號句 | 同上 | 40 | **7** | 同上（只處理了一部分） |
+| 3 行編號句 | `system`（自寫的翻譯指令）+ `target_translation:"Chinese"` | 3 | **3** ✅ | 逐行譯文 |
+| 40 行編號句 | 同上 | 40 | **40** ✅ | 逐行譯文，不黏行 |
+
+結論：**行對應不是端點的保證，是提示的形状決定的**。上面 §1 那些 18/18、34/34、51/51 都带了
+`system` + `source_language`/`target_translation`；去掉指令後同一個端點就不逐行回。
+
+邊界（誰該做什麼）：插件本來就帶自己的提示模板（所以上面第二行那種輸入在真實流量裡少见），
+本代理也不注入 prompt 文字（規則 9）→ 這件事修不了，只能：（a）不讓它更糟（不重編編號、不黏行、
+按原分隔接回），（b）用 `x-proxy-chunk-lines` 把「邊側幾行」暴露出來，（c）在 README 寫清楚。
 
 ## 未證明（下一輪再補，成本都不高）
 
