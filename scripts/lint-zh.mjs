@@ -36,6 +36,8 @@ for (const root of roots) {
     const lines = readFileSync(file, "utf8").split("\n")
     lines.forEach((line, i) => {
       if (file.endsWith("lint-zh.mjs")) return
+      // 規則 11：上游的簡體原文「原文照引時標注出處」即可 → 帶出處標記的行不計
+      if (line.includes("上游原文") || line.includes("原文照引")) return
       const found = [...new Set([...line].filter((c) => BAD.has(c)))]
       if (!found.length) return
       hits += found.length

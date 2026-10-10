@@ -152,8 +152,8 @@ UA 相關結論先做 self-check：用 httpbin 回憶標頭，證明 `node:https
 | `fetch` + `cf.resolveOverride` → `103.151.151.133`（bilibili 自家 CDN IP） | **412** |
 | `cloudflare:sockets` 直連 `103.151.151.4/133/134:443`（帶 SNI/Host）與 `:80` | 連得上但**零位元組回應**（不是可用的路徑） |
 
-判讀：擋下來的是 **Cloudflare 邊緣的 bot 過濾**，條件是**出口 IP 的等級**（CF 自家 datacenter 段），
-**不是 UA**——UA 在本地能決定 200/412（§2），在 CF 出口則全被擋。
+當下的判讀（**已在 §9 修正**）：擋下來的是 **CF 邊緣的 bot 過濾**，條件是**出口 IP 的等級**，
+**不是 UA**——UA 在本地能決定 200/412（§2），在 CF 出口则全被擋。
 上游無 AAAA（只 A 記錄），所以不是 IPv6 的問題。
 
 **這動到專案的立論**：AGENTS 的第一段說「上游 WAF 擋特定機器人 UA，所以非瀏覽器的 client 需要一個
@@ -163,6 +163,30 @@ UA 相關結論先做 self-check：用 httpbin 回憶標頭，證明 `node:https
 （b）中转放在非 CF 出口（自有機器／隧道），Worker 只做鑑權＋切塊＋組包；
 （c）請上游白名單 CF 出口。選 (a) 前要確認 Zero Trust 有 seat 與 token 權限（本輪那兩個 API 回 403）。
 
+## 9. 第五輪：擋人的是 **bilibili 自己的風控**，而且兩條路的前端不同（§8 判讀修訂）
+
+§8 的「CF 邊緣 bot 過濾」這個判讀**不對**，重測後：
+
+| 證據 | 內容 |
+|---|---|
+| 擋封頁的文字（上游原文，簡體） | `出错啦! - bilibili.com` … 「由於触发哔哩哔哩安全风控策略，该次访问请求被拒绝。The request was rejected because of the bilibili security control policy.」——這是 **bilibili 的 412 模板**，不是 Cloudflare 的錯誤頁 |
+| 第二種 body | 有些請求回 `{"code":-412,"message":"request was banned","ttl":1}`（JSON），也是 bilibili 風控的形狀 |
+| **本機直連上游** | `HTTP/2 200`、`server: uvicorn`（就是 Index-Translate 那個 FastAPI）、`x-cache-webcdn: BYPASS from blzone09`，**完全沒有 `cf-ray`** → 本機這條路**不經過 Cloudflare** |
+| 從 Worker 出去 | `server: cloudflare` → 落進 bilibili 的 **CF 代理邊緣**，再被它的 origin 風控擋掉 |
+
+所以：**不是「我們把請求帶壞了」，而是同一個 host 有兩條路**：
+bilibili 自家 CDN（`103.151.151.x`，能通）與 Cloudflare 代理邊緣（從 CF 出口必經，被風控擋）。
+
+**對三條出路的影響**（重要）：
+- **WARP egress 不一定有用**：WARP 只換**來源 IP**（AS9009），不會換**目的地邊緣**；如果擋人的是 bilibili 的
+  CF zone 對「來自 CF 內部／資料中心來源」的規則，換來源 IP 無效。**未測**（Zero Trust API 回 403）。
+- **Tunnel origin（自架 connector）可行度高**：Worker → 自己 zone 的 Tunnel origin（這一段在 CF 內部，不會被擋）
+  → connector 在本地機器打上游（就是上面那條 200 的路）。計算還是 serverless，出口是自有線路。
+- 舊證據：自己帳號裡 2026-10-06 就有一個同目的地的 worker `bil-translate-proxy`（瀏覽器 UA + `origin: translate-cloud.pages.dev`），
+  現在也是 **412** → 這個問題比本 repo 早，不是新代碼造成的。
+- 使用者在 `*.dpdns.org` / `avpclub.eu.org` / `avpclub.uk` 這些**自己的 zone** 上的規則（如「擋中國 IP」）
+  **不會作用在對外的請求**上（zone 規則只管進入該 zone 的流量），而 `*.workers.dev` 與 `*.pages.dev`
+  本來就沒有 zone 可設規則；`firewall/rules` API 回 403，看不到那些規則（無法進一步查證）。
 ## 未證明（下一輪再補，成本都不高）
 
 1. `max_tokens` 是否被鉗在 4,096：只需一檔 `max_tokens:16384` ＋ 6,000 字元輸入。
