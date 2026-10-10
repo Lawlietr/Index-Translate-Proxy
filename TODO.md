@@ -5,14 +5,13 @@
 
 ## 待做（依賴順序）
 
-0. **【阻塞】出口問題**：Worker 打上游一律 412（原因與證據：`design/upstream-probe-2026-10-10.md` §8–§9；
-   **方案比較與驗證順序在 `design/egress-options.md`**）。新事實：**從 Jina 的資料中心打上游是 200**
-   → 不是所有非家用出口都被擋，只有 CF 那條路被擋。下一步（最便宜、也最決定性）：
-   **Vercel 最小探測** —— 一個函式做 `GET /v1/models` 加一個 3 行的串流翻譯，一次判掉 Vercel（並間接判掉
-   同類 serverless）能不能當出口。需要 Vercel 帳號 / token。規格面已查過：Hobby 函式 300s、可串流、
-   **等待 I/O 不計 active CPU**；但 Static IPs 要 Pro、預設單一 region（延遲會變差）。
-   Tunnel origin 排在它後面（要一台不會關機的機器）；WARP egress 降級（只換來源、不換目的地）。
-   家務：`itp-ua-probe`、`itp-echo` 兩個一次性 worker 因 token 缺 `Memberships:Read` 刪不掉，要在 dashboard 手動刪。
+0. **【已定位，待决定】出口問題**：Worker 打上游一律 412，成因是那個域名**依 client 解析到不同 CDN 前端**，
+   從 Workers 出去落到 bilibili 的 **CF 代理那一側**而被風控挡掉（`design/upstream-probe-2026-10-10.md` §8–§10）。
+   **已驗證可用的出口：Vercel**（`GET /v1/models` 200 ×4、真增量 SSE ×3，走 `server: uvicorn` 那条路）；
+   代价是到上游 RTT 暖 228–235ms（本機 35–45ms）。方案比较见 `design/egress-options.md`。
+   → **要做的决定**：把本代理搬到 Vercel（我的建议，一层 serverless，不做中转）？还是走 Tunnel／本機橋？
+   家務：`itp-ua-probe`、`itp-echo` 兩個一次性 worker 因 token 缺 `Memberships:Read` 刪不掉，要在 dashboard 手動刪；
+   一次性 Vercel 探測项目 `itp-egress-probe` 决定后也要删。
 1. **補測（小規模，隨時可跑）** —— `node scripts/probe-upstream.mjs <群組>`，未證明項的完整清單見
    `design/upstream-probe-2026-10-10.md`「未證明」節。優先度：
    - `max_tokens` 是否被鉗在 4,096（一檔 `max_tokens:16384` 就能判）。
@@ -34,6 +33,10 @@
 
 ## 已完成（最多五項，新在上）
 
+- 2026-10-10：**出口可行性實測** —— 一次性 Vercel 探測函式（repo 外 `/tmp/itp-vercel-probe`）→
+  **從 Vercel 出口打上游 200 ×6**（`/v1/models` 舆 3 行串流翻譯，SSE 真增量），拿到成因：
+  同一 host 依 client 解析到不同 CDN 前端（CF 代理 = 412；bilicdn `uvicorn` = 200）。
+  新增 `design/egress-options.md`（五個出口方案的已測/未測/規格）與 probe §10；AGENTS 事實表新增兩列。
 - 2026-10-10：部署到 `index-translate-proxy.yanzilme.workers.dev`（`wrangler secret put ITP_KEY` + `deploy`）
   並跑線上探測 → **發現阻塞性事實：從 CF 出口打上游一律 412**（四轮一次性 probe worker 定位：UA 無關、
   全站、`resolveOverride`/raw socket 都不能繞）。已寫入 AGENTS 事實表與 design/upstream-probe §8。

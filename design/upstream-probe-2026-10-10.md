@@ -153,7 +153,7 @@ UA 相關結論先做 self-check：用 httpbin 回憶標頭，證明 `node:https
 | `cloudflare:sockets` 直連 `103.151.151.4/133/134:443`（帶 SNI/Host）與 `:80` | 連得上但**零位元組回應**（不是可用的路徑） |
 
 當下的判讀（**已在 §9 修正**）：擋下來的是 **CF 邊緣的 bot 過濾**，條件是**出口 IP 的等級**，
-**不是 UA**——UA 在本地能決定 200/412（§2），在 CF 出口则全被擋。
+**不是 UA**——UA 在本地能決定 200/412（§2），在 CF 出口則全被擋。
 上游無 AAAA（只 A 記錄），所以不是 IPv6 的問題。
 
 **這動到專案的立論**：AGENTS 的第一段說「上游 WAF 擋特定機器人 UA，所以非瀏覽器的 client 需要一個
@@ -162,6 +162,7 @@ UA 相關結論先做 self-check：用 httpbin 回憶標頭，證明 `node:https
 （a）Cloudflare Network egress／WARP connector 把出口換成 AS9009 的 IP；
 （b）中转放在非 CF 出口（自有機器／隧道），Worker 只做鑑權＋切塊＋組包；
 （c）請上游白名單 CF 出口。選 (a) 前要確認 Zero Trust 有 seat 與 token 權限（本輪那兩個 API 回 403）。
+→ 出路 (b) 的「非 CF 出口」已在 **§10 實測通過**（用 Vercel，不需要自己的機器）。
 
 ## 9. 第五輪：擋人的是 **bilibili 自己的風控**，而且兩條路的前端不同（§8 判讀修訂）
 
@@ -187,11 +188,38 @@ bilibili 自家 CDN（`103.151.151.x`，能通）與 Cloudflare 代理邊緣（�
 - 使用者在 `*.dpdns.org` / `avpclub.eu.org` / `avpclub.uk` 這些**自己的 zone** 上的規則（如「擋中國 IP」）
   **不會作用在對外的請求**上（zone 規則只管進入該 zone 的流量），而 `*.workers.dev` 與 `*.pages.dev`
   本來就沒有 zone 可設規則；`firewall/rules` API 回 403，看不到那些規則（無法進一步查證）。
+
+## 10. 第六輪：換出口實測——**Vercel 的出口可用**（2026-10-10 晚間）
+
+從 Vercel（Hobby、`iad1`）部署一個一次性探測函式（repo 外 `/tmp/itp-vercel-probe`，
+`https://itp-vercel-probe.vercel.app`），連測 6 次打上游：
+
+| 項目 | 結果 |
+|---|---|
+| 出口 IP | `54.172.44.226`（AWS us-east-1 段；連續多次請求**不輪換**） |
+| `GET /v1/models` | **200 ×4**，原生模型清單；`server: uvicorn`、`x-cache-webcdn: BYPASS from blzone01/02`、**無 `cf-ray`** |
+| `POST /v1/chat/completions`（`stream:true`，3 行） | **200 ×3**，`text/event-stream`，**真增量**（6–7 塊）；函式內測 TTFT 541–599ms、完成 786–871ms |
+| 到上游的 RTT | **暖 228–235ms**（冷啟動那次 441/688ms）。本機同一條路 35–45ms → **慢約 5–6 倍** |
+
+**修正 §9 的說法**（把「CF 的 DNS 解析」改成可檢驗的版本）：同一個 host 會**依 client 解析到不同的 CDN 前端**——
+CF 出口的請求落到 **Cloudflare 代理**（`server: cloudflare`）→ 被 bilibili 風控擋 412；
+本機與 Vercel 出口的請求落到 **bilibili 自家 `blzone*` webcdn**（`server: uvicorn`、無 `cf-ray`）→ **200**。
+→ 擋我們的不是「Cloudflare 這個公司」，也不是 UA，而是**我們落進了 bilibili 的 CF 代理那一側**。
+→ 因此出路是把出口換到走 bilicdn 那一側（Vercel 已驗證）；在 Worker 內強制解析到 bilicdn IP 的兩條路
+（`cf.resolveOverride`、原生 socket）都**未成功**（§8）。
+
+Vercel 側的**文件限制**（未實機壓到，別當成已驗）：Hobby 函式 300s；Edge runtime 需 25s 內開始回、
+可串流到 300s；**等待 I/O 不計 active CPU**；Static IPs 僅 Pro；預設單 region。
+仍**未測**：長輸出（`max_tokens:4096`）經 Vercel 的實際耗時與 `finish_reason:"length"` 透傳；
+共用出口池下的 429——Vercel 的出口也是共用池，與 CF 是同一個結構問題，換平台不解決配額共享。
 ## 未證明（下一輪再補，成本都不高）
 
 1. `max_tokens` 是否被鉗在 4,096：只需一檔 `max_tokens:16384` ＋ 6,000 字元輸入。
 2. 429 的真實 fixture：要把 token 堆到 60k/min 才會觸發（估計要 ~25 個 2,400 字元請求在一分鐘內）。
 3. 其他語言方向的膨脹比：只測了 zh→en；`en→zh`、`ja→zh` 的 output/input 比例可能差很多，
    直接影響 `MAX_INPUT_CHARS` 的邊界（對繁體中文→中文這種不翻譯的情況還沒看過）。
-4. ~~從 Cloudflare edge 打上游的實際延遲~~ → 已測：**打不到**（§8，412）。要改成「换出口後能不能打到」。
+4. ~~從 Cloudflare edge 打上游的實際延遲~~ → 已測：CF 出口**打不到**（§8，412）；換到 Vercel 出口**打得到**，
+   到上游 RTT 暖 228–235ms（§10）。仍未知：不同地理位置的 client 經 Vercel 的端到端體驗。
+6. **Vercel 出口的穩定性**：本輪只連測 6 次。要看會不會換出口 IP 段、換段後是否仍 200，
+   以及共用出口池被別人用壞時的 429 形態。
 5. 上游是否會因 `max_tokens:4096` 這類注入而改變其他行為（只測過 2,512 tokens 的成功案例）。

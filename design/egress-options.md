@@ -16,15 +16,21 @@
 
 ## 1. 選項與成本
 
-### A. Vercel（函式即代理，整個出口換掉）
+### A. Vercel（函式即代理，整個出口換掉）— **已實測可用，目前唯一验证過的可行出口**
+- **已測（2026-10-10，§10）**：從 `iad1` 函式打上游 → `GET /v1/models` **200 ×4**（`server: uvicorn`、
+  `x-cache-webcdn: BYPASS from blzone01/02`、無 `cf-ray`）；`POST /v1/chat/completions`（`stream:true`）
+  **200 ×3**，SSE **真增量**（6–7 塊）。出口 IP `54.172.44.226`，連續請求**不輪換**。
+- **已測的代價**：到上游 RTT **暖 228–235ms**（本機同一條路 35–45ms）。切塊越多，這個固定成本乘得越多。
 - **規格**：Hobby 函式 300s 預設且上限 → 我們最長 36s，餘力夠。Edge runtime 要在 25s 內開始回，之後可串流到 300s → 上游 TTFT 0.17–1.0s，沒問題。
 - **規格**：**等待 I/O 不計 active CPU**（官方明寫「calling AI models 不算」）→ 對翻譯代理這種純 I/O 負載正好。
-- **規格**：預設單一 region（`iad1`）→ 到 bilibili 邊緣多一趟跨太平洋 RTT；延遲會比現在差。
+- **規格**：預設單一 region（`iad1`）。已測：從 us-east-1 到 bilicdn 邊緣 230ms —— 比本機慢，但**至少這是一條能量出延遲的路**（Workers 那條路是 412，不是慢）。
 - **規格**：**Static IPs 只有 Pro/Enterprise**（要固定出口 IP 就得付費）。Hobby 用的是共用 AWS 出口池。
 - **規格**：Proxied Request Timeout 120s（經 Vercel 代理時）。
-- **未測**：**Vercel（AWS iad1）的出口能不能打到上游**——這整個選項成不成立全看這一條。
+- **未測**：長輸出（`max_tokens:4096`）經 Vercel 的實際耗時與 `finish_reason` 透傳；共用池下的 429。這兩項要拿本專案的 `probe-live` 打 Vercel 版才算驗證過。
 - 遷移成本：低。本專案的 `src/lib/*` 全是純 JS + Web Streams，`fetch`/`Headers`/`ReadableStream` 在 Vercel 都有；
   要改的只有入口（`export default {fetch}` → Vercel 的 route handler）與設定載入。
+  實際踩到的坑（已驗）：`api/[[...slug]].js` 這種參數檔名在 CLI 上傳後**不會**被編譯成函式（`functions: null`）；
+  改成 `api/probe.js` + `vercel.json` 的 `builds:[{"src":"api/**","use":"@vercel/node"}]` 與顯式 `routes` 才可用。
 
 ### B. 其他非 CF 的免費 serverless（同類替代品）
 Netlify / Deno Deploy / Fastly Compute：**未測**，但它們同樣是「非 CF 的出口」，Jina 那條 200 對它們是正面訊號。
@@ -48,8 +54,9 @@ Netlify / Deno Deploy / Fastly Compute：**未測**，但它們同樣是「非 C
 
 ## 2. 建議的驗證順序（每步都是幾分鐘的成本）
 
-1. **Vercel 最小探測**（一個函式，做兩件事：`GET /v1/models` 與一個 3 行的串流翻譯）→ 一次判掉 A 與（間接）B。
-   需要 Vercel 帳號/token。
+1. ~~Vercel 最小探測~~ → **已做，通過**（`/tmp/itp-vercel-probe` → `itp-vercel-probe.vercel.app`，2026-10-10）。
+   下一步是**把本代理移到 Vercel**（保留 `src/lib/*` 不動，只換入口與環境變數載入），再用
+   `scripts/probe-live.mjs` 打它 —— 那才會涵蓋切塊、413、401、429 透傳、`finish_reason` 等 19 項。
 2. 若 1 通：決定 A（把本專案改成 Vercel 版）**或**保留 CF Worker 的協定碼、只把上游換成 Vercel 上的中轉。
    我傾向**整個換到 A**：兩層 serverless 只是多一跳和兩個部署。
 3. 若 1 不通但有常開機器：走 C。

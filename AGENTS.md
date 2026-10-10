@@ -1,6 +1,6 @@
 # AGENTS.md — Index-Translate-Proxy
 
-> **狀態：第一版已實裝（本地驗證完），尚未部署。** `src/worker.js` + `src/lib/{route,headers,auth,model,chunk,stream,limits}.js`、
+> **狀態：第一版已實裝、已部署並做過線上探測（線上 9/19）。** `src/worker.js` + `src/lib/{route,headers,auth,model,chunk,stream,limits}.js`、
 > `tests/*.test.mjs`（67 條離線）、`scripts/{smoke-local,probe-live,probe-upstream,lint-zh}.mjs` 都在。
 > 本地 `wrangler dev`（miniflare，打真上游）通過 `probe-live` 的 19 項——**但那不是線上**：
 > 規則 13 要求的「打真的 worker」還沒跑，因為還沒 `wrangler deploy`。本檔的規則是實作的約束，
@@ -16,7 +16,9 @@
 
 > ⚠️ **2026-10-10 部署後實測**：上面這段在**本機**成立，但**以 Cloudflare Worker 作為出口不成立**——從 Worker
 > 出口打上游一律 412（下表「出口可達性」列）。已完成的部分（協定、鑑權、切塊、組包、測試）都可用，
-> 但**要先解決出口**才算能用。選項與證據：`design/upstream-probe-2026-10-10.md` §8。
+> 但**要先解決出口**才算能用。原因已定：那個域名**依 client 解析到不同的 CDN 前端**，從 Worker 出去會落到
+> bilibili 的 **CF 代理那一側**而被風控擋掉；**已驗證從 Vercel 出口能打到上游**（§10）。
+> 選項與證據：`design/upstream-probe-2026-10-10.md` §8–§10、`design/egress-options.md`。
 
 **License: MIT.**（上游是 Apache-2.0，無傳染性；規則 10 講清楚邊界。）
 
@@ -44,6 +46,7 @@
 | **輸出上限** | 截斷發生在**輸出側**：預設完成上限 **2,048 tokens**，用完就停並回 **`finish_reason:"length"`**（所以丟尾**可偵測**）。同一份 zh→en 測試文本：輸入 ≤2,400 字元（41 行）完整；≥2,600 字元只回 42 行，且 3,000/4,000/6,000 三者的輸出完全同長。`max_tokens` **被精確尊重**（要 40 就停 40）；`max_tokens:4096` 下 3,040 字元完整譯完（51/51 行、2,512 tokens）；`max_tokens:8192` 停在恰好 4,096 → **推定上游把 max_tokens 鉗在 4,096**（未證實）。zh→en 膨脹比 ≈ 0.83 completion tokens／輸入字元。**舊說法「輸入 4,000 字元會截斷」不成立**〔2026-10-10〕 |
 | 可達性 | `index-translate.bilibili.com` CNAME → `bilicdn1.com`（海外節點 `103.151.151.x`，`x-cache-webcdn: BYPASS`）→ 不是只在中國大陸可達〔2026-10-08〕 |
 | **出口可達性（致命）** | **從 Worker 出口打上游，全部 412**：任意路徑／方法／UA（含瀏覽器 UA、不設 UA）、走 `http://` 也一樣，`www.bilibili.com/` 同樣 412，而 `api.ipify.org` 正常 200（出口 `2a06:98c0:…`，AS13335）。`cf.resolveOverride` 與 `cloudflare:sockets` 直連 bilicdn IP 都不能繞過（前者仍 412、後者零位元組回應）。上游無 AAAA → 不是 IPv6 問題〔2026-10-10，§8〕 |
+| **兩條路的成因與可用出口** | 412 的 body 是 **bilibili 自己的風控模板**（「触发…安全风控策略」／`{"code":-412,"message":"request was banned"}`），不是 CF 錯誤頁。成因：同一 host **依 client 解析到不同 CDN 前端** —— 從 Worker 落到 **CF 代理**（`server: cloudflare`）→ 風控 412；從**本機**或 **Vercel 出口**（AWS `54.172.44.226`／`iad1`）落到 bilibili 自家 `blzone*` webcdn（`server: uvicorn`、**無 `cf-ray`**）→ **200 ×6**（含 `GET /v1/models` 與真增量 SSE）。→ **已驗證可用的非 CF 出口：Vercel**（到上游 RTT 暖 228–235ms，比本機慢 5–6 倍）〔2026-10-10，§9–§10〕 |
 | **為什麼 412（第五輪定案）** | 擋人的**不是 CF 的錯誤頁，是 bilibili 自己的風控**（`由于触发哔哩哔哩安全风控策略，该次访问请求被拒绝`〔上游原文〕、`{"code":-412,"message":"request was banned"}`）。**同一個 host 有兩條路**：本機直連 = `103.151.151.x`（bilicdn）、`server: uvicorn`、`x-cache-webcdn: BYPASS`、**無 `cf-ray`** → **200**；從 Worker 出口 = 落進 bilibili 的 **CF 代理邊緣**（`server: cloudflare`）→ 被它的 origin 風控擋。重點是**目的地走哪條路**，不是 UA、也不只是來源 IP → **WARP egress 只換來源不換目的地**，未測、不保證有效。可行度高的是 **Tunnel origin（自架 connector）**：Worker 打自己 zone 的 Tunnel 入口（CF 內部，不會被擋），由本地機器打上游。自己帳號裡 2026-10-06 的舊 worker `bil-translate-proxy`（同目的地、瀏覽器 UA）現在也是 412 → 與本專案代碼無關〔§8–§9〕 |
 | 配額 | **有**：`60,000 tokens/min` **per IP**，超出回 **429** + `retry-after: 1`，body 為 `{"error":{"type":"rate_limit_error","code":429,"retry_after":1,…}}`（此形狀為早間實測；同日第二輪堆到 20k tokens/90s 與 36k tokens 併發都**未再觸發 429**，也無配額查詢端點）。**併發不增加吞吐**：10 個併發請求全部成功但總時間 21.9s → 47.8s（≈5 倍），上游近乎串行 → 本地並發上限是必要的（規則 7）。免費、不需金鑰、無 SLA；bilibili 會撤回模型名稱（`index-homura-*` 先例）〔2026-10-10〕 |
 
