@@ -1,10 +1,11 @@
 # AGENTS.md — Index-Translate-Proxy
 
 > **狀態：已實裝並已上線。** 已部署的那份是**我自己用的**（`https://index-translate-proxy.vercel.app`）——
-> 不是公共實例，也不對外發 key（定位見「刻意不做」）。線上探測 `probe-live` **21 ok / 0 fail / 1 skip**
+> 不是公共實例，也不對外發 key（定位見「刻意不做」）。線上探測 `probe-live` **22 ok / 0 fail / 1 skip**
 > （跳過的是 per-instance 併發閘，平台上不可測），`probe-sse-timing` 兩側真增量。
-> 2026-10-11 起這件事**由 GitHub Actions 每日排程重跑**，而且 client 端**不是我的網路**（GitHub 托管 runner
-> 的出口）→ 同數字 `38107205187`：21 ok / 0 fail / 1 skip，27.2s。上游那一跳仍是從 Vercel 出口出去（就是生產路徑）。放行清單（規則 1）也已線上驗證
+> 2026-10-11 起這件事**由 GitHub Actions 每日排程重跑**，client 端**不是我的網路**（GitHub 托管 runner 的出口）：
+> `38107205187` 是 21/0/1；加上建置對應的檢查之後是 22/0/1，而且總結行會印出**跑的是哪個 commit**
+> （`38108762173`：`建置 255b30db7f21`，26.3s）。上游那一跳仍是從 Vercel 出口出去（就是生產路徑）。放行清單（規則 1）也已線上驗證
 > （含「`index-mt-9b` 經本代理真的能翻」與「`-syllable` 被擋」兩項）。
 
 ## Project Overview
@@ -143,12 +144,6 @@
     已接通並跑綠（2026-10-11，`38107205187`）。**踩過的坑（留起來）**：首跑 15 個 401——Vercel 複製環境變數
     時會把**變數名稱一起複製**，所以貼進去的 secret 帶著 `ITP_KEY=` 前綴。判別方法：401 的 body 是本代理自己的
     文案而 `GET /` 回 `x-proxy-auth: configured` → 兩邊是不同的 key，不是端點壞了。
-13a. **線上出问题要能對應到某一次部署：**所有回應帶 **`x-proxy-build`**（12 字元 commit，`src/lib/build-info.js`）。
-    值是**部署前**由 `scripts/deploy-ref-vercel.mjs` 寫進 Vercel 的 `GIT_COMMIT`（`npm run deploy:vercel` 會先跑它）——
-    平台自己的 `VERCEL_GIT_COMMIT_SHA` 只有由 Git 觸發的部署才有值，本專案走 CLI 上傳，所以不能假裝那裡有東西；
-    它只作為後備讀取順序裡的第二項。**沒有就不帶標頭**（不造假），`probe-live` 在沒有標記時把這一項記 **skip**
-    而不是 fail。標記加在 `worker.fetch` 的出口，因此 401／404／429 這些本地錯誤也有——排程探測紅的時候多半就是那些。
-
 13. **部署是測試環的一環：**部署後必須用**真的線上入口**跑一次探測（`node scripts/probe-live.mjs <base>`；主入口現為
     Vercel；CF 入口是可選的備援、因出口 412 未啟用，只有在真的啟用時才需要跑一輪），至少覆蓋
     插件的 `/v1` 路徑形狀、UA（腳本 UA 打 worker 不該 412）、**放行清單真的能用（含 `index-mt-9b`）與不放行的名字回 400**、超長段的切塊接回、
@@ -157,6 +152,18 @@
     （`node scripts/probe-sse-timing.mjs <base>`；**量測 client 要用 curl**，本機 JS client 會把小塊合併，
     量出來的「緩衝」是假象——這個誤判發生過一次）。
     「本機跑過」在這種上傳產物／edge 部署的情境裡不代表線上。
+    **線上問題要能對應到某一次部署**（同一條規則的另一半）：所有回應帶 **`x-proxy-build`**（12 字元 commit，`src/lib/build-info.js`）。
+    值是**部署前**由 `scripts/deploy-ref-vercel.mjs` 寫進 Vercel 的 `GIT_COMMIT`（`npm run deploy:vercel` 會先跑它）——
+    平台自己的 `VERCEL_GIT_COMMIT_SHA` 只有由 Git 觸發的部署才有值，本專案走 CLI 上傳，所以不能假裝那裡有東西；
+    它只作為後備讀取順序裡的第二項。**沒有就不帶標頭**（不造假），`probe-live` 在沒有標記時把這一項記 **skip**
+    而不是 fail。標記加在 `worker.fetch` 的出口，因此 401／404／429 這些本地錯誤也有——排程探測紅的時候多半就是那些。
+    已上線（2026-10-11）：排程探測的總結行變成「22 ok / 0 fail / 1 skip（平台：vercel，**建置 255b30db7f21**）」。
+    順帶一個**可重現的實測**，支持「為什麼要自己設」：`vercel env pull --environment=production` 拉出來的
+    `VERCEL_GIT_COMMIT_SHA` 是**空字串**（值只有兩個字元＝一對引號），而 `GIT_COMMIT` 是 42 字元 →
+    CLI 上傳的部署確實拿不到那個值，不是推測。
+    另：標記是在出口**重新包一層 Response**，包錯會讓 Edge 上變成緩衝而內容檢查看不出來 → 部署後必須跑
+    `probe-sse-timing`（2026-10-11 跑過：上游 152 行跨 2,715ms、經代理 147 行跨 3,233ms，兩側真增量）。
+
 14. **文件分工：**`TODO.md` 只放待做項目、一個**明確標為「可選／不是待做」**的區塊（目前放 CF 入口那組：代碼保留、但不排進工作），與最多五項已完成（置底）；設計、實測紀錄、規格拆解一律放
     `design/`；更早的完成紀錄查 `git log --oneline`。同一件事的真相只能有一處——`AGENTS.md` 寫結論，
     證據與細節放 `design/`，`TODO.md` 只寫「要做什麼」。

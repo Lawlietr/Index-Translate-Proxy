@@ -70,17 +70,14 @@
 
 ### T5 定期家務
 
-- **T5.1 讓線上探測能對應到 commit**（已做，只剩部署）：`x-proxy-build`（12 字元）＋ `scripts/deploy-ref-vercel.mjs`
-  （部署前把 `GIT_COMMIT` 設進 Vercel）。**剩下的動作在使用者** ⏱5：给我 `VERCEL_TOKEN`（或直接自己跑
-  `npm run deploy:vercel`）→ 部署完跑 `probe-live`，要看到 `x-proxy-build` 是這次部署的 commit，且排程探測的
-  總結行會印出「建置 …」。在部署之前，線上那份还不知道自己是哪個 commit，探測对它而言仍是 skip（誠實，不假裝通過）。
-
-- Vercel token 為 7 天效期（2026-10-10 簽發 → ≈ 10-17 到期）：到期或外洩就在 dashboard 撤銷重發。部署走 `npm run deploy:vercel`
-  （需 `VERCEL_TOKEN`＋`VERCEL_TEAM_ID`，兩把都不寫進 repo）。`ITP_KEY` 目前兩側共用同一把，若要分開管理，在 Vercel 的
-  Settings → Environment Variables 改。⏱5
-- CI 的 runner 注記（不碰協定碼）：`actions/checkout@v4`／`actions/setup-node@v4` 自報「Node 20 已棄用」警告（不影響結果），
-  `ubuntu-latest` 將於 2026-10-19 轉 Ubuntu 26 → 哪天換 `@v5` 即可。⏱5
-- 推鏡像：`git push github main`（CI 的載體，規則 12）。⏱1
+- **Vercel token：要用的時候現簽，別存著** ⏱5：2026-10-11 這一次用的是**只有 24 小時**壽命的 token（簽了就用、
+  不進 repo、不進文件）。之前那把號稱 7 天的沒有留記錄，事後也不知道在哪 → 家務規則改成「**部署前現簽、
+  用完不留**」，而不是養一把長期 token。`VERCEL_TEAM_ID` 這把實際上不需要（個人帳號，API 不帶 teamId 就行）。
+  `ITP_KEY` 若要與 GitHub 那把分開管理：Vercel 的 Settings → Environment Variables 改。
+- **CI 的 runner 注記**（不碰協定碼）⏱5：`actions/checkout@v4`／`actions/setup-node@v4` 會自報「Node 20 已棄用」
+  警告（不影響結果）；`ubuntu-latest` 將於 2026-10-19 轉 Ubuntu 26 → 哪天換 `@v5` 即可。
+- **推鏡像** ⏱1：`git push github main`（CI 的載體，規則 12）。
+- （T5.1 已做完並線上驗證：見已完成 2026-10-11。要重現標記就用 `npm run deploy:vercel`——它會先設 `GIT_COMMIT`。）
 
 ## 已定案（不再列為待做，往後也不再重複提問）
 
@@ -135,6 +132,14 @@
   排程探測紅的時候才能說「是哪一份代碼在那個網址上」。本地 runtime 已證（200／401／204 都帶、沒設 `GIT_COMMIT`
   就不帶），測試 +9（91 全過），兩份 README 的標頭表同步——順帶修掉一個文件錯：README 寫的是 `x-proxy-truncated`，
   代碼實際發的是 `x-proxy-chunk-truncated`。線上那一半要用 `VERCEL_TOKEN` 部署才能驗（見待做 T5.1）。
+  **T5.1 同日線上結帳**（一把只有 24 小時的 `VERCEL_TOKEN`，不進 repo、不進文件）：先用 `vercel env pull` 證實
+  `VERCEL_GIT_COMMIT_SHA` 是**空字串**（值只有兩個字元＝一對引號）而 `GIT_COMMIT` 42 字元 → 「自己要設」有實據。
+  部署後 `GET /` 回 `x-proxy-build: 255b30db7f21`（＝當時 HEAD），排程探測 `38108762173` 的總結行印出
+  「22 ok / 0 fail / 1 skip（平台：vercel，**建置 255b30db7f21**，26.3s）」。
+  **時序那一項是必經的**：標記是在出口重新包一層 Response，包錯的話內容檢查不會紅。`probe-sse-timing` 兩側真增量
+  （上游 152 行跨 2,715ms、經代理 147 行跨 3,233ms）。順帶修掉該腳本的判定錯誤：固定 800ms 的地板會把
+  「83 行跨 610ms」這種**快但真的增量**判成 FAIL；改成 `max(250ms, (行數-1)×6ms)`，並用「72 行同一瞬間 → 拒」
+  這種形狀核過規則本身（不燒配額）。
 - 2026-10-10：**放行清單上線並線上探測** —— 逐個測過 `index-mt-2b/9b/-syllable`（`design/model-allowlist.md`）→
   放行 `Index-Translate-35B-A3B`/`index-mt-9b`/`index-mt-2b`，`-syllable` 因會漏行／丟編號不放行；
   `GET /v1/models` 改由本代理自己回。重新部署後線上 `probe-live` **21 ok / 0 fail / 1 skip**（跳過的是 per-instance 併發閘）、
