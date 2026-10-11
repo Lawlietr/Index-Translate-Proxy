@@ -56,8 +56,15 @@ function judge(label, stamps) {
   const first = stamps[0].ms
   const last = stamps.at(-1).ms
   const spread = last - first
-  const ok = spread >= MIN_SPREAD_MS
-  console.log(`  ${ok ? "ok  " : "FAIL"} ${label}：${stamps.length} 行｜首块 +${first}ms｜末块 +${last}ms｜跨度 ${spread}ms（門檻 ${MIN_SPREAD_MS}ms）`)
+  // 門檻要跟著**增量數**走，不能是一個固定的毫秒數（2026-10-11 踩到）：生成 80 個 delta 在上游只要 610ms
+  // 是正常的（83 行 ≈ 7ms/行），固定 800ms 会把「很快但真的增量」誤判成緩衝。
+  // 要判的是「有沒有分批抵達」：以每行至少 6ms 的間距當下限。地板用 250ms，不用 MIN_SPREAD_MS——
+  // 要抓的那種緩衝是「72 個塊同一瞬間抵達」（Vercel Node runtime 實測，span ≈ 0），250ms 就分得出來；
+  // 把預設的 800ms 當地板反而會誤傷短輸出。MIN_SPREAD_MS 變成可調參數（--min-spread）。
+  const floor = Math.min(MIN_SPREAD_MS, 250)
+  const need = Math.max(floor, (stamps.length - 1) * 6)
+  const ok = spread >= need
+  console.log(`  ${ok ? "ok  " : "FAIL"} ${label}：${stamps.length} 行｜首块 +${first}ms｜末块 +${last}ms｜跨度 ${spread}ms（需 ≥${need}ms，地板 ${floor}ms）`)
   return ok
 }
 
