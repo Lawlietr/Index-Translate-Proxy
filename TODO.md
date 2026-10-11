@@ -46,10 +46,13 @@
   `.github/workflows/live-probe.yml`，排程每日 07:17 UTC ＋ 可手動觸發。）放排程而不是放 push，三個理由：
   它花**真的上游配額**（上游按出口 IP 限流，Vercel 的出口 IP 是共用池）；漂移按天發生、不按 commit 發生；
   混進 push 的臨界路徑只會讓 CI 變成隨機紅。它的輸出是**漂移警示**，不進 `design/` 事實表（規則 12）。
-  - **T3.4a 設 repository secret（動作在使用者——我拿不到那把 key）** ⏱2：
-    `echo '<ITP_KEY>' | gh secret set ITP_PROBE_KEY`。沒有它，排程每天會在「需要 secrets」那一步明確失敗並附上
-    設定指引——這個行為已在 run `38106369535` 驗證過（不是假設）。選填 `ITP_PROBE_URL` 可換目標；不設就用
-    README 那個公開入口。
+  - **T3.4a key 要對得上那份部署（動作在使用者）** ⏱2：secret **已設**（2026-10-11），但那把值不等 Vercel
+    專案目前的 `ITP_KEY` → 首跑 `38106853772` 得到 `6 ok / 15 fail / 1 skip`，所有需要鑑權的檢查都是 401，
+    而 401 的 body 是**本代理自己的文案**、`GET /` 又回 `x-proxy-auth: configured` → 兩邊是不同的 key，
+    不是端點壞了。（順帶一個正面訊號：規則 8 的鑑權在任何上游請求之前，這 15 個 401 **沒花上游配額**；
+    根路徑、預檢、本地 404、401 形狀、無 `<think>`、burst 不含函式本身失敗——這 6 項照樣過。）
+    做什麼：從 Vercel dashboard（Settings → Environment Variables）複製现行的 `ITP_KEY`，重設
+    `ITP_PROBE_KEY`；或兩邊一起輪換（換完要重新部署並重跑線上探測，規則 13）。**不要把 key 貼進任何文件。**
 - ~~**T3.5** 在 workflow 註解與 `design/` 標明 CI 出口邊界（只跑 `probe-live`、不跑 `probe-upstream`）。~~
   （**已做**：檔頭註解兩個 workflow 都有，結論在 AGENTS 規則 12；`design/` 依規則 14 不重複同一件事。）
 - **T3.6（可選，不是待做）** 徽章進兩份 README：那是對外宣稱。`ci.yml` 已經綠過，但 `live-probe` 要先有
