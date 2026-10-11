@@ -70,6 +70,11 @@
 
 ### T5 定期家務
 
+- **T5.1 讓線上探測能對應到 commit**（已做，只剩部署）：`x-proxy-build`（12 字元）＋ `scripts/deploy-ref-vercel.mjs`
+  （部署前把 `GIT_COMMIT` 設進 Vercel）。**剩下的動作在使用者** ⏱5：给我 `VERCEL_TOKEN`（或直接自己跑
+  `npm run deploy:vercel`）→ 部署完跑 `probe-live`，要看到 `x-proxy-build` 是這次部署的 commit，且排程探測的
+  總結行會印出「建置 …」。在部署之前，線上那份还不知道自己是哪個 commit，探測对它而言仍是 skip（誠實，不假裝通過）。
+
 - Vercel token 為 7 天效期（2026-10-10 簽發 → ≈ 10-17 到期）：到期或外洩就在 dashboard 撤銷重發。部署走 `npm run deploy:vercel`
   （需 `VERCEL_TOKEN`＋`VERCEL_TEAM_ID`，兩把都不寫進 repo）。`ITP_KEY` 目前兩側共用同一把，若要分開管理，在 Vercel 的
   Settings → Environment Variables 改。⏱5
@@ -126,6 +131,10 @@
   **`38107205187`：21 ok / 0 fail / 1 skip（探測本身 27.2s）**，而 client 是 **GitHub 托管 runner 的出口**，
   不是我的網路——同一把數字換一個出口還是同一把，這是「已線上驗證」最強的一次證據。
   規則 7 那項照樣如實 skip（Vercel 把 12 個併發分散到多個實例，per-instance 的閘不會擋）。
+  **T5.1（同日的另一項）**：加了 `x-proxy-build`（12 字元 commit）與 `scripts/deploy-ref-vercel.mjs`，
+  排程探測紅的時候才能說「是哪一份代碼在那個網址上」。本地 runtime 已證（200／401／204 都帶、沒設 `GIT_COMMIT`
+  就不帶），測試 +9（91 全過），兩份 README 的標頭表同步——順帶修掉一個文件錯：README 寫的是 `x-proxy-truncated`，
+  代碼實際發的是 `x-proxy-chunk-truncated`。線上那一半要用 `VERCEL_TOKEN` 部署才能驗（見待做 T5.1）。
 - 2026-10-10：**放行清單上線並線上探測** —— 逐個測過 `index-mt-2b/9b/-syllable`（`design/model-allowlist.md`）→
   放行 `Index-Translate-35B-A3B`/`index-mt-9b`/`index-mt-2b`，`-syllable` 因會漏行／丟編號不放行；
   `GET /v1/models` 改由本代理自己回。重新部署後線上 `probe-live` **21 ok / 0 fail / 1 skip**（跳過的是 per-instance 併發閘）、

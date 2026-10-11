@@ -97,6 +97,18 @@ async function main() {
   const root = await call("/")
   const authFlag = root.res.headers.get("x-proxy-auth")
   check("GET / → 200 + x-proxy-auth", root.res.status === 200 && (authFlag === "configured" || authFlag === "missing"), `${root.res.status} / ${authFlag}`)
+
+  // 1b) 建置標記（AGENTS 規則 13）：紅灯要能對應到「哪一份代碼在那個網址上」，不然只能說「那個網址壞了」。
+  const build = root.res.headers.get("x-proxy-build")
+  if (build) {
+    check("x-proxy-build 是 12 字元 hex（能對應到部署的 commit）", /^[0-9a-f]{12}$/.test(build), build)
+    console.log("  建置：" + build)
+  } else {
+    skip(
+      "x-proxy-build（把失敗對應到 commit）",
+      "那份部署沒帶 GIT_COMMIT → 無法對應 commit（用 `npm run deploy:vercel` 會自動設；在 Vercel 環境變數設 GIT_COMMIT 也可以）",
+    )
+  }
   if (authFlag === "missing") {
     check("未設 ITP_KEY 時 chat 請求回 503（不假裝能用）", true, "")
     const r = await call("/v1/chat/completions", { method: "POST", body: JSON.stringify({ model: ALLOWED_MODEL, messages: [{ role: "user", content: "你好" }] }) })
@@ -248,10 +260,10 @@ async function main() {
     )
   }
 
-  console.log(`\n${pass} ok / ${fail} fail / ${skipped} skip（平台：${platform}，${((Date.now() - t0) / 1000).toFixed(1)}s）`)
+  console.log(`\n${pass} ok / ${fail} fail / ${skipped} skip（平台：${platform}${build ? "，建置 " + build : ""}，${((Date.now() - t0) / 1000).toFixed(1)}s）`)
   if (OUT) {
     mkdirSync(OUT.replace(/\/[^/]+$/, ""), { recursive: true })
-    writeFileSync(OUT, JSON.stringify({ base: BASE, at: stamp(), checks: results }, null, 2))
+    writeFileSync(OUT, JSON.stringify({ base: BASE, at: stamp(), platform, build: build || null, checks: results }, null, 2))
     console.log(`結果：${OUT}`)
   }
   if (fail) process.exitCode = 1

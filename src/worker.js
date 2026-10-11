@@ -14,6 +14,7 @@ import {
   proxyHeaders,
 } from "./lib/headers.js"
 import { checkAuth, checkAuthRateLimit, authConfigured, authMode, clientIp } from "./lib/auth.js"
+import { withBuildMarker } from "./lib/build-info.js"
 import { readLimits, getGate, gateFullResponse } from "./lib/limits.js"
 import { ALLOWED_MODEL, ALLOWED_MODELS, modelsPayload, modelNotAllowed, modelNotAllowedMessage } from "./lib/model.js"
 import { findTranslatable, planChunks, bodyForChunk, overLongLine } from "./lib/chunk.js"
@@ -36,83 +37,91 @@ const ENC = new TextEncoder()
 
 export default {
   async fetch(request, env) {
-    const url = new URL(request.url)
-    const route = resolvePathname(url.pathname)
-
-    // 1) 預檢：不鑑權。allow-headers 少了 authorization，插件只會報 CORS 失敗、不會告訴你原因。
-    if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: corsHeaders() })
-    }
-
-    // 2) 根路徑：一行說明 + x-proxy-auth，讓部署者開根路徑就知道自己有沒有設 key（不碰上游）。
-    if (route.kind === "root") {
-      if (request.method !== "GET") return localError(404, "這個路徑不存在")
-      const mode = authMode(env)
-      return new Response(rootDescription(url.host, mode, ALLOWED_MODELS), {
-        status: 200,
-        headers: mergeHeaders(corsHeaders(), {
-          "content-type": "text/plain; charset=utf-8",
-          "x-proxy-auth": mode,
-        }),
-      })
-    }
-
-    // 3) 其他未知路徑一律本地 404（丟給上游只是白費一次配額）。
-    if (route.kind !== "upstream") {
-      return localError(
-        404,
-        `本代理沒有這個路徑：${url.pathname}。可用的是 /v1/chat/completions、/v1/models、/v1/responses（或同樣的 /api/… 寫法）`,
-      )
-    }
-
-    // 4) 鑑權（規則 8）。失敗走獨立限流，免得亂試 key 把正常請求擠掉。
-    const auth = await checkAuth(request, env)
-    if (!auth.ok) {
-      log({ req: "auth", ip: clientIp(request), result: auth.reason })
-      const rl = await checkAuthRateLimit(request, env)
-      if (!rl.ok) return rl.response
-      return auth.response
-    }
-
-    // 4b) `GET /v1/models` 由本代理**自己回**放行清單（不佔 slot、不花上游配額）。
-    // 上游那份只宣告 35B-A3B，照它回會舆本代理實際放行的不一致（design/model-allowlist.md）。
-    if (route.path === "/v1/models") {
-      if (request.method !== "GET") {
-        return new Response(null, { status: 405, headers: mergeHeaders(corsHeaders(), { allow: "GET" }) })
-      }
-      return new Response(JSON.stringify(modelsPayload()), {
-        status: 200,
-        headers: mergeHeaders(corsHeaders(), { "content-type": "application/json; charset=utf-8" }),
-      })
-    }
-
-    // 5) 並發閘（規則 7）：一個請求從進到出持有一個 slot（切塊是依序的，同時只有一塊在途）。
-    // 閘滿時先**在本地排隊**，等不到才 429（design/streaming-and-chunking.md §2）。
-    const limits = readLimits(env)
-    const gate = getGate(limits.maxInflight)
-    const waitT0 = Date.now()
-    if (!(await gate.waitForSlot(limits.slotWaitMs))) {
-      log({
-        req: "gate-full",
-        path: route.path,
-        limit: limits.maxInflight,
-        waitedMs: Date.now() - waitT0,
-      })
-      return gateFullResponse()
-    }
-
-    // 串流路徑會把 slot 交給 controller 釋放，所以這裡用 transferred 決定要不要在此釋放。
-    let transferred = false
-    try {
-      const out = isChatPath(route.path)
-        ? await handleChat(request, route, limits, () => gate.release())
-        : await handlePassthrough(request, route)
-      transferred = out.transferred === true
-      return out.response
-    } finally {
-      if (!transferred) gate.release()
-    }
+    // **所有**回應都加上建置標記（知道的時候；不知道就不帶，不造假）。
+    // 為什麼要在這裡做而不是在各個回應點：排程探測紅的時候多半就是 401／404／429 這些本地錯誤，
+    // 標記只在正常回應上等於沒有（AGENTS 規則 13）。複製標頭不碰 body，串流不受影響。
+    return withBuildMarker(await handle(request, env), env)
   },
+}
+
+/** 協定主流程：OPTIONS → 根路徑／路徑檢查 → 鑑權 → 併發閘 → 切塊／強制串流／轉發。 */
+async function handle(request, env) {
+  const url = new URL(request.url)
+  const route = resolvePathname(url.pathname)
+
+  // 1) 預檢：不鑑權。allow-headers 少了 authorization，插件只會報 CORS 失敗、不會告訴你原因。
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders() })
+  }
+
+  // 2) 根路徑：一行說明 + x-proxy-auth，讓部署者開根路徑就知道自己有沒有設 key（不碰上游）。
+  if (route.kind === "root") {
+    if (request.method !== "GET") return localError(404, "這個路徑不存在")
+    const mode = authMode(env)
+    return new Response(rootDescription(url.host, mode, ALLOWED_MODELS), {
+      status: 200,
+      headers: mergeHeaders(corsHeaders(), {
+        "content-type": "text/plain; charset=utf-8",
+        "x-proxy-auth": mode,
+      }),
+    })
+  }
+
+  // 3) 其他未知路徑一律本地 404（丟給上游只是白費一次配額）。
+  if (route.kind !== "upstream") {
+    return localError(
+      404,
+      `本代理沒有這個路徑：${url.pathname}。可用的是 /v1/chat/completions、/v1/models、/v1/responses（或同樣的 /api/… 寫法）`,
+    )
+  }
+
+  // 4) 鑑權（規則 8）。失敗走獨立限流，免得亂試 key 把正常請求擠掉。
+  const auth = await checkAuth(request, env)
+  if (!auth.ok) {
+    log({ req: "auth", ip: clientIp(request), result: auth.reason })
+    const rl = await checkAuthRateLimit(request, env)
+    if (!rl.ok) return rl.response
+    return auth.response
+  }
+
+  // 4b) `GET /v1/models` 由本代理**自己回**放行清單（不佔 slot、不花上游配額）。
+  // 上游那份只宣告 35B-A3B，照它回會舆本代理實際放行的不一致（design/model-allowlist.md）。
+  if (route.path === "/v1/models") {
+    if (request.method !== "GET") {
+      return new Response(null, { status: 405, headers: mergeHeaders(corsHeaders(), { allow: "GET" }) })
+    }
+    return new Response(JSON.stringify(modelsPayload()), {
+      status: 200,
+      headers: mergeHeaders(corsHeaders(), { "content-type": "application/json; charset=utf-8" }),
+    })
+  }
+
+  // 5) 並發閘（規則 7）：一個請求從進到出持有一個 slot（切塊是依序的，同時只有一塊在途）。
+  // 閘滿時先**在本地排隊**，等不到才 429（design/streaming-and-chunking.md §2）。
+  const limits = readLimits(env)
+  const gate = getGate(limits.maxInflight)
+  const waitT0 = Date.now()
+  if (!(await gate.waitForSlot(limits.slotWaitMs))) {
+    log({
+      req: "gate-full",
+      path: route.path,
+      limit: limits.maxInflight,
+      waitedMs: Date.now() - waitT0,
+    })
+    return gateFullResponse()
+  }
+
+  // 串流路徑會把 slot 交給 controller 釋放，所以這裡用 transferred 決定要不要在此釋放。
+  let transferred = false
+  try {
+    const out = isChatPath(route.path)
+      ? await handleChat(request, route, limits, () => gate.release())
+      : await handlePassthrough(request, route)
+    transferred = out.transferred === true
+    return out.response
+  } finally {
+    if (!transferred) gate.release()
+  }
 }
 
 /** 結構化日誌（design/streaming-and-chunking.md §6）：只有 `wrangler tail` 讀得到的事實，沒有面板。 */

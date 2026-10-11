@@ -118,11 +118,14 @@ curl -s -w "\nHTTP %{http_code}\n" -X POST "$B/v1/chat/completions" -H "content-
 
 錯誤一律是 OpenAI 形狀（`error.message`），插件會直接把 message 顯示出來。回應一律帶：
 
+（`x-proxy-build` 是給**部署者自己**的：線上出問題時，能從回應直接看出跑的是哪一份代碼。`npm run deploy:vercel` 會在部署前把 commit 設進 Vercel；用 dashboard 部署的話，自己加一個 `GIT_COMMIT` 環境變數即可。）
+
 | 標頭 | 意義 |
 |---|---|
 | `x-proxy-upstream-stream: forced` | 對上游一律要 SSE（非串流會被上游 10s 砍） |
 | `x-proxy-chunks` / `x-proxy-chunk-failed` / `x-proxy-chunk-lines` | 切了幾塊、哪塊失敗、失敗前已譯出幾行 |
-| `x-proxy-truncated` | 上游 `finish_reason:"length"`，尾部被截掉了 |
+| `x-proxy-chunk-truncated` | 上游 `finish_reason:"length"`，尾部被截掉了 |
+| `x-proxy-build` | 那份部署是哪個 commit（12 字元）；沒設 `GIT_COMMIT` 就不帶這個標頭 |
 | `x-proxy-auth` | `configured`／`missing`：部署端有沒有設 key |
 | `x-proxy-hint` | 只在錯誤回應出現，給建議（不改上游的 status 與 body） |
 
@@ -133,7 +136,7 @@ curl -s -w "\nHTTP %{http_code}\n" -X POST "$B/v1/chat/completions" -H "content-
 | 400（模型） | 只放行上面三個；訊息會寫「放行的模型：…」 |
 | 413 | 單行超長或 body 太大，訊息會說明怎麼繞過 |
 | 429 + `Retry-After` | 看 `x-proxy-hint`：是本地閘還是上游回的 |
-| 譯到一半就停 | `x-proxy-truncated`／`finish_reason:"length"` |
+| 譯到一半就停 | `x-proxy-chunk-truncated`／`finish_reason:"length"` |
 | 行數對不上 | 上游偶爾回 `choices: []`；代理不重試，原樣傳出去 |
 
 </details>

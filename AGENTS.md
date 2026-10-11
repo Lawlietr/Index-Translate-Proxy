@@ -143,6 +143,12 @@
     已接通並跑綠（2026-10-11，`38107205187`）。**踩過的坑（留起來）**：首跑 15 個 401——Vercel 複製環境變數
     時會把**變數名稱一起複製**，所以貼進去的 secret 帶著 `ITP_KEY=` 前綴。判別方法：401 的 body 是本代理自己的
     文案而 `GET /` 回 `x-proxy-auth: configured` → 兩邊是不同的 key，不是端點壞了。
+13a. **線上出问题要能對應到某一次部署：**所有回應帶 **`x-proxy-build`**（12 字元 commit，`src/lib/build-info.js`）。
+    值是**部署前**由 `scripts/deploy-ref-vercel.mjs` 寫進 Vercel 的 `GIT_COMMIT`（`npm run deploy:vercel` 會先跑它）——
+    平台自己的 `VERCEL_GIT_COMMIT_SHA` 只有由 Git 觸發的部署才有值，本專案走 CLI 上傳，所以不能假裝那裡有東西；
+    它只作為後備讀取順序裡的第二項。**沒有就不帶標頭**（不造假），`probe-live` 在沒有標記時把這一項記 **skip**
+    而不是 fail。標記加在 `worker.fetch` 的出口，因此 401／404／429 這些本地錯誤也有——排程探測紅的時候多半就是那些。
+
 13. **部署是測試環的一環：**部署後必須用**真的線上入口**跑一次探測（`node scripts/probe-live.mjs <base>`；主入口現為
     Vercel；CF 入口是可選的備援、因出口 412 未啟用，只有在真的啟用時才需要跑一輪），至少覆蓋
     插件的 `/v1` 路徑形狀、UA（腳本 UA 打 worker 不該 412）、**放行清單真的能用（含 `index-mt-9b`）與不放行的名字回 400**、超長段的切塊接回、

@@ -18,7 +18,8 @@
     "probe": "node scripts/probe-upstream.mjs",
     "probe-live": "node scripts/probe-live.mjs",
     "dev:vercel": "vercel dev --listen 8788",
-    "deploy:vercel": "vercel deploy --prod --yes",
+    "ref:vercel": "node scripts/deploy-ref-vercel.mjs",
+    "deploy:vercel": "node scripts/deploy-ref-vercel.mjs && vercel deploy --prod --yes",
     "env:vercel": "node scripts/set-env-vercel.mjs",
     "probe:timing": "node scripts/probe-sse-timing.mjs"
   },

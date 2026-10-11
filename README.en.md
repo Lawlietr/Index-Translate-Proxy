@@ -122,11 +122,15 @@ The reasoning is in [`design/why-proxy.md`](design/why-proxy.md) and
 Errors always use the OpenAI shape (`error.message`), so the plugin displays the message directly. Every response
 carries:
 
+(`x-proxy-build` is for **you, the deployer**: when something goes wrong online, the response tells you which build is running.
+`npm run deploy:vercel` sets the commit in Vercel before deploying; if you deploy from the dashboard, add a `GIT_COMMIT` environment variable yourself.)
+
 | Header | Meaning |
 |---|---|
 | `x-proxy-upstream-stream: forced` | upstream is always asked for SSE (non-streaming gets cut off by the upstream after 10s) |
 | `x-proxy-chunks` / `x-proxy-chunk-failed` / `x-proxy-chunk-lines` | how many chunks were sent, which one failed, how many lines were translated before the failure |
-| `x-proxy-truncated` | the upstream returned `finish_reason:"length"`, the tail was cut off |
+| `x-proxy-chunk-truncated` | the upstream returned `finish_reason:"length"`, the tail was cut off |
+| `x-proxy-build` | which commit that deployment runs (12 characters); this header is absent when `GIT_COMMIT` is not set |
 | `x-proxy-auth` | `configured` / `missing`: whether the deployment has a key set |
 | `x-proxy-hint` | only on error responses, a suggestion (does not change the upstream's status or body) |
 
@@ -137,7 +141,7 @@ carries:
 | 400 (model) | only the three models above are allowed; the message lists them |
 | 413 | a single line too long, or the body too large; the message explains how to work around it |
 | 429 + `Retry-After` | look at `x-proxy-hint`: our local gate, or the upstream's own |
-| translation stops halfway | `x-proxy-truncated` / `finish_reason:"length"` |
+| translation stops halfway | `x-proxy-chunk-truncated` / `finish_reason:"length"` |
 | line count does not match | the upstream sometimes returns `choices: []`; the proxy does not retry, it passes it through as-is |
 
 </details>
