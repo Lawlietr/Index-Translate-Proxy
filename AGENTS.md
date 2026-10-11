@@ -2,7 +2,9 @@
 
 > **狀態：已實裝並已上線。** 已部署的那份是**我自己用的**（`https://index-translate-proxy.vercel.app`）——
 > 不是公共實例，也不對外發 key（定位見「刻意不做」）。線上探測 `probe-live` **21 ok / 0 fail / 1 skip**
-> （跳過的是 per-instance 併發閘，平台上不可測），`probe-sse-timing` 兩側真增量。放行清單（規則 1）也已線上驗證
+> （跳過的是 per-instance 併發閘，平台上不可測），`probe-sse-timing` 兩側真增量。
+> 2026-10-11 起這件事**由 GitHub Actions 每日排程重跑**，而且 client 端**不是我的網路**（GitHub 托管 runner
+> 的出口）→ 同數字 `38107205187`：21 ok / 0 fail / 1 skip，27.2s。上游那一跳仍是從 Vercel 出口出去（就是生產路徑）。放行清單（規則 1）也已線上驗證
 > （含「`index-mt-9b` 經本代理真的能翻」與「`-syllable` 被擋」兩項）。
 
 ## Project Overview
@@ -134,8 +136,11 @@
     **CI 的出口不是生產出口**：CI 只跑 `probe-live`（打已部署的入口），**不跑** `probe-upstream`（直接打上游）——
     同一 host 依 client 解析到不同的 CDN 前端（見上表「為什麼 412」那列），從 CI 出口拿到的結果不進 `design/` 的
     事實表。部署與線上入口都已在，所以 CI 現在可以排（見 TODO）。
-    **線上入口的排程探測**在 `.github/workflows/live-probe.yml`（一天一次，需 repository secret `ITP_PROBE_KEY`；
-    它打的是已部署入口，輸出同為**漂移警示**，不進事實表）。
+    **線上入口的排程探測**在 `.github/workflows/live-probe.yml`（一天一次 07:17 UTC，需 repository secret
+    `ITP_PROBE_KEY` = 那份部署的 `ITP_KEY`；它打的是已部署入口，輸出同為**漂移警示**，不進事實表）。
+    已接通並跑綠（2026-10-11，`38107205187`）。**踩過的坑（留起來）**：首跑 15 個 401——Vercel 複製環境變數
+    時會把**變數名稱一起複製**，所以貼進去的 secret 帶著 `ITP_KEY=` 前綴。判別方法：401 的 body 是本代理自己的
+    文案而 `GET /` 回 `x-proxy-auth: configured` → 兩邊是不同的 key，不是端點壞了。
 13. **部署是測試環的一環：**部署後必須用**真的線上入口**跑一次探測（`node scripts/probe-live.mjs <base>`；主入口現為
     Vercel；CF 入口是可選的備援、因出口 412 未啟用，只有在真的啟用時才需要跑一輪），至少覆蓋
     插件的 `/v1` 路徑形狀、UA（腳本 UA 打 worker 不該 412）、**放行清單真的能用（含 `index-mt-9b`）與不放行的名字回 400**、超長段的切塊接回、
