@@ -117,7 +117,7 @@
     不是兩份不同的文件）。改一份就同步改另一份；結構對等由 `node scripts/readme-parity.mjs`（`npm run lint:readme`）
     檢查：章節序列、表格行列與其中的代幣、非註解指令、連結、`<details>` 數量、正文的數字都要一致，只有散文可以不同。
     兩個刻意不同的地方：部署按鈕的 `envDescription`/`envLink`（各語言一份），以及徽章的顯示文字。
-    **例外：`README.en.md` 是對外英文版**（2026-10-12）。兩份 README 是同一份文件的兩個語言版本，
+    **例外：`README.en.md` 是對外英文版**（2026-10-11）。兩份 README 是同一份文件的兩個語言版本，
     **內容必須 100% 對等**——改一份就同步改另一份，結構對等由 `npm run lint:readme`
     （`scripts/readme-parity.mjs`）檢查：章節序列、表格行列與其中的代幣、非註解指令、連結、`<details>` 數量、
     正文中的數字（預設值／上限／測試數）都要一致；只有散文可以不同。部署按鈕的 `envDescription`／`envLink`

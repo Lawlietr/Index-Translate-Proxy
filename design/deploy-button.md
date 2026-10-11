@@ -1,6 +1,6 @@
 # design/deploy-button.md — 一鍵部署按鈕（Vercel 為主，CF 為附）
 
-狀態：**Vercel 按鈕已在 README（2026-10-12 上線，並已用 API 確認參數被接受）**。
+狀態：**Vercel 按鈕已在 README**（按鈕 2026-10-10 進 README；2026-10-11 用 API 確認參數被接受）。
 CF 按鈕**不放**：從 CF 出口打上游會 412（[`egress-options.md`](egress-options.md)），
 部署出來的實例打不到上游——按了不能用，比沒按鈕更糟。
 
