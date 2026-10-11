@@ -7,11 +7,9 @@
 
 <p align="center"><b>(◕ᴗ◕)</b> <sub>Both language versions of this README are 100% equivalent — change one, the other is updated too</sub></p>
 
-<p align="center">
-  Turn bilibili <b>Index-Translate</b> (a free translation model with an OpenAI-compatible API) into an OpenAI-compatible endpoint you host yourself — paste it into a browser extension or any other client.<br>
-  A thin proxy: it does not rewrite your prompt, swap models, or cache.<br>
-  It only does what is actually needed to make the upstream usable from a plugin: fixed UA, path normalisation, forced streaming, line-boundary chunking, and a passcode of your own.
-</p>
+Turn bilibili **Index-Translate** (a free translation model with an OpenAI-compatible API) into an OpenAI-compatible endpoint you host yourself — paste it into a browser extension or any other client.
+
+A thin proxy: it does not rewrite your prompt, swap models, or cache. It only does what a plugin actually needs: fixed UA, path normalisation, forced streaming, line-boundary chunking, and a passcode of your own.
 
 Deploy it in your own Vercel project: free, no GPU, no upstream account — running in about five minutes.
 
@@ -101,7 +99,7 @@ debug that.
 | `SLOT_WAIT_MS` | `15000` | how long to wait for a slot before returning 429; give up earlier or wait longer |
 | `MAX_INPUT_CHARS` | `2500` | chunk size (the upstream truncates on the output side, so this is a conservative bound) |
 | `MAX_LINE_CHARS` | `2000` | chunks are cut at line boundaries only, so this is the single-line limit (too long → 413 with a way around it) |
-| `MAX_TOKENS_DEFAULT` | `4096` | value injected when the client sends no `max_tokens` (the upstream's default 2,048 cuts the tail off) |
+| `MAX_TOKENS_DEFAULT` | `4096` | value injected when the client sends no `max_tokens`. **4,096 is also the upstream's hard ceiling** (measured: asking for 16,384 still yields 4,096), so a larger value does nothing |
 | `MAX_BODY_BYTES` | `16384` | per-chunk body limit, above that → 413 |
 
 To change any of them, add a variable with the same name in Vercel's Environment Variables and redeploy.
@@ -132,7 +130,7 @@ carries:
 | `x-proxy-chunk-truncated` | the upstream returned `finish_reason:"length"`, the tail was cut off |
 | `x-proxy-build` | which commit that deployment runs (12 characters); this header is absent when `GIT_COMMIT` is not set |
 | `x-proxy-auth` | `configured` / `missing`: whether the deployment has a key set |
-| `x-proxy-hint` | only on error responses, a suggestion (does not change the upstream's status or body) |
+| `x-proxy-hint` | a suggestion from us (does not change the upstream's status or body). It appears on errors, and also **when your `max_tokens` exceeds 4,096** — a header is the only place that can tell you why the tail is gone |
 
 | Symptom | Check first |
 |---|---|
@@ -141,8 +139,20 @@ carries:
 | 400 (model) | only the three models above are allowed; the message lists them |
 | 413 | a single line too long, or the body too large; the message explains how to work around it |
 | 429 + `Retry-After` | look at `x-proxy-hint`: our local gate, or the upstream's own |
-| translation stops halfway | `x-proxy-chunk-truncated` / `finish_reason:"length"` |
+| translation stops halfway / missing tail | see “Missing lines at the end?” below |
 | line count does not match | the upstream sometimes returns `choices: []`; the proxy does not retry, it passes it through as-is |
+
+**Missing lines at the end?** This is the one most often mistaken for “the proxy is broken”.
+
+Truncation happens on the **output** side: the upstream's completion ceiling is **4,096 completion tokens** (measured: asking for `max_tokens: 16384` still yields exactly 4,096), and hitting it returns `finish_reason: "length"`. The three cases need different answers:
+
+1. **You or the plugin asked for a `max_tokens` above 4,096** → the upstream silently clamps it back to 4,096. This proxy does not overwrite your value (your setting stays yours), but it answers with an `x-proxy-hint` that says so. Asking for 4,096 or less loses nothing: that *is* the ceiling.
+2. **The source you paste is long** (several thousand characters) → this proxy only splits at line boundaries, and every block gets the same 4,096-token output budget; a 2,500-character block is estimated at ~2,075 tokens (half the ceiling), so normally nothing is lost. If you do see `x-proxy-chunk-truncated: <N>` (N is the block index), that block needed more than 4,096 tokens: send that passage in shorter pieces, or make the plugin translate fewer lines per request.
+3. **A single line exceeds `MAX_LINE_CHARS`** → you get a 413 whose message explains how to work around it; we never silently edit your input, because edited input no longer maps back.
+
+How to check whether something was cut: for non-streaming responses look at `x-proxy-chunk-truncated` or `choices[0].finish_reason`; for streaming, at the last frame carrying a `finish_reason`. Streaming responses include `usage` too (we always send `include_usage`), so you can compare directly: exactly 4,096 completion tokens means the ceiling was reached.
+
+**None of the three means “text vanished halfway”:** 1 and 2 are the upstream's output ceiling, and for 3 we refuse the request outright. The proxy does not automatically re-split an oversized block (v1 marks the fact honestly), because re-splitting would make the numbered-line mapping uncertain.
 
 </details>
 
@@ -172,7 +182,7 @@ There is a single copy of the protocol code (`src/lib/`); the entry points are o
 
 - The upstream is a **free public endpoint**: no SLA, **60,000 tokens/min per IP**, and cloud egress IPs are a shared pool; model names get withdrawn.
 - Concurrency protection is per instance, not a global guarantee.
-- Output-side truncation: raising it to 4,096 tokens only pushes the problem further.
+- Output-side truncation: the ceiling is **the upstream's** 4,096 completion tokens (hard, measured) — not something we can raise; long text is only handled by line-boundary chunking.
 - The upstream is unreachable from Cloudflare egress (412), which is why the default entry point is Vercel.
 - The upstream models have token-decoding defects ("秦漢→秦漢"); a thin proxy does not repair upstream output.
 

@@ -7,11 +7,9 @@
 
 <p align="center"><b>(◕ᴗ◕)</b> <sub>這份 README 有兩個語言版本，內容 100% 對等——改一份會同步另一份</sub></p>
 
-<p align="center">
-  把 bilibili <b>Index-Translate</b>（免費的翻譯模型，OpenAI 相容 API）接成一個 OpenAI 相容端點，貼進瀏覽器插件或其他 client 就能用。<br>
-  這是一個薄代理：不改 prompt、不換模型、不快取。<br>
-  只做能被插件用上需要的那幾件事：固定 UA、路徑正規化、強制串流、行界切塊，外加一把自己的通行碼。
-</p>
+把 bilibili **Index-Translate**（免費的翻譯模型，OpenAI 相容 API）接成一個 OpenAI 相容端點，貼進瀏覽器插件或其他 client 就能用。
+
+這是一個薄代理：不改 prompt、不換模型、不快取。只做讓插件真正用得上的那幾件事：固定 UA、路徑正規化、強制串流、行界切塊，外加一把自己的通行碼。
 
 部署在自己的 Vercel 專案上：免費、不需 GPU、不需上游的帳號，五分鐘跑起來。
 
@@ -99,7 +97,7 @@ curl -s -w "\nHTTP %{http_code}\n" -X POST "$B/v1/chat/completions" -H "content-
 | `SLOT_WAIT_MS` | `15000` | 排隊等不到就 429；想更早放手或多等一會兒 |
 | `MAX_INPUT_CHARS` | `2500` | 切塊大小（上游的截斷在輸出側，這個值是保守邊界） |
 | `MAX_LINE_CHARS` | `2000` | 只在行界切塊，所以這個值是單行上限（超長 → 413 並說明繞法） |
-| `MAX_TOKENS_DEFAULT` | `4096` | 客戶端沒帶 `max_tokens` 時補的值（上游預設 2,048 會截尾） |
+| `MAX_TOKENS_DEFAULT` | `4096` | 客戶端沒帶 `max_tokens` 時補的值。**4,096 同時是上游的硬上限**（實測：要 16,384 也只給 4,096），設更大不會有效 |
 | `MAX_BODY_BYTES` | `16384` | 單塊 body 上限，超過 → 413 |
 
 要調就在 Vercel 的 Environment Variables 加同名變數，重新部署生效。
@@ -127,7 +125,7 @@ curl -s -w "\nHTTP %{http_code}\n" -X POST "$B/v1/chat/completions" -H "content-
 | `x-proxy-chunk-truncated` | 上游 `finish_reason:"length"`，尾部被截掉了 |
 | `x-proxy-build` | 那份部署是哪個 commit（12 字元）；沒設 `GIT_COMMIT` 就不帶這個標頭 |
 | `x-proxy-auth` | `configured`／`missing`：部署端有沒有設 key |
-| `x-proxy-hint` | 只在錯誤回應出現，給建議（不改上游的 status 與 body） |
+| `x-proxy-hint` | 我們的建議（不改上游的 status 與 body）。錯誤回應會有；**你帶的 `max_tokens` 超過 4,096 時也有**，因為那時只有標頭能告訴你為什麼尾部少了 |
 
 | 症狀 | 先看什麼 |
 |---|---|
@@ -136,8 +134,27 @@ curl -s -w "\nHTTP %{http_code}\n" -X POST "$B/v1/chat/completions" -H "content-
 | 400（模型） | 只放行上面三個；訊息會寫「放行的模型：…」 |
 | 413 | 單行超長或 body 太大，訊息會說明怎麼繞過 |
 | 429 + `Retry-After` | 看 `x-proxy-hint`：是本地閘還是上游回的 |
-| 譯到一半就停 | `x-proxy-chunk-truncated`／`finish_reason:"length"` |
+| 譯到一半就停／最後幾行少了 | 見下方「最後幾行少了，怎麼辦」 |
 | 行數對不上 | 上游偶爾回 `choices: []`；代理不重試，原樣傳出去 |
+
+**最後幾行少了，怎麼辦？**（最常被誤會成「代理壞了」的就是這一件）
+
+截斷發生在**輸出側**：上游的完成上限是 **4,096 completion tokens**（實測：要 `max_tokens: 16384` 也只給恰好 4,096），
+撞到就停並回 `finish_reason: "length"`。三種情況的處理方式不一樣：
+
+1. **你或插件帶了超過 4,096 的 `max_tokens`** → 上游會**靜默**鉗回 4,096。本代理不覆蓋你帶的值（你的設定是你的），
+   但會在 `x-proxy-hint` 寫出這件事。把 `max_tokens` 設在 4,096 以內沒有損失——上限就是它。
+2. **一次貼的原文很長**（幾千字元）→ 本代理只在行界切塊，每塊都有 4,096 的輸出預算，而 2,500 字元的塊預估只要
+   ~2,075 tokens（上限的一半），正常不會截。真的看到 `x-proxy-chunk-truncated: <N>`（N 是塊序）時，代表那一塊的譯文
+   超過 4,096 tokens：把那段拆短再送，或讓插件每次少翻譯幾行。
+3. **單行本身超過 `MAX_LINE_CHARS`** → 直接 413，訊息會寫怎麼繞（不會悄悄改你的輸入，因為改了就對不回原文）。
+
+怎麼確認有沒有被截：非串流看 `x-proxy-chunk-truncated` 或 `choices[0].finish_reason`；串流看最後一個帶
+`finish_reason` 的框。串流也有 `usage`（本代理一律帶 `include_usage`），所以能直接比對：completion tokens
+恰好 4,096 = 撞到上限。
+
+**這三種都不是「翻譯到一半不見了」的資料遺失**：第 1、2 種是上游的輸出上限，第 3 種我們乾脆不接。
+本代理不自動把過長的塊對半重送（v1 只做老實標記），因為那會讓編號行的對應變得不確定。
 
 </details>
 
@@ -165,7 +182,7 @@ npm run lint:readme # 兩份 README 的結構對等檢查（改一份要同步�
 
 - 上游是**免費公網端點**：無 SLA、**60,000 tokens/min per IP**，雲端出口 IP 是共用池；模型名稱會被撤回。
 - 並發保護是 per-instance，不是全域保證。
-- 輸出側截斷：補到 4,096 tokens 只是把問題往後推。
+- 輸出側截斷：上限是**上游的** 4,096 completion tokens（硬上限，已實測），不是我們能抬的；長文只能靠行界切塊避開。
 - 從 Cloudflare 出口打不到上游（412），所以預設入口是 Vercel。
 - 上游模型有代幣解碼缺陷（「秦漢→秦漢」）；薄代理不修上游的輸出。
 
