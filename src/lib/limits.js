@@ -9,6 +9,15 @@
 //    閘滿時先在本地排隊（FIFO），等不到才 429 + Retry-After。
 //    計的是**請求**，不是切出來的塊——同請求的塊是依序送的，同時只有一塊在途。
 
+/**
+ * 上游對 `max_tokens` 的**硬上限**（不是本代理的開關，所以不進 DEFAULTS/BOUNS，也不可經 env 調）。
+ * 2026-10-11 實測（T1.1）：要 `max_tokens: 16384`、輸入 6,000 字元 → 上游只給**恰好 4,096**
+ * completion tokens，`finish_reason:"length"`，101 行只回 83 行。證據：`tests/fixtures/ceiling-16384.summary.json`。
+ * 這也說明 `MAX_TOKENS_DEFAULT` 設得比它大沒有意義（上游會靜默鉗掉），所以上界就夾在这里。
+ * 真要改這個值，先重跑 `node scripts/probe-upstream.mjs ceiling`。
+ */
+export const UPSTREAM_MAX_TOKENS_CEILING = 4096
+
 /** 預設值。wrangler.toml 的 [vars] 要與這裡一致（AGENTS.md 規則 15），改一處就兩邊都改。 */
 export const DEFAULTS = {
   MAX_INPUT_CHARS: 2500, // 切塊邊界；上游截斷在輸出側，3,040 字元仍完整譯完 → 留膨脹餘量（design/upstream-probe §1）
@@ -22,7 +31,7 @@ export const DEFAULTS = {
 // 夾擠範圍：設錯（打錯字、0、超大值）不該讓 worker 變慢或打爆上游，所以要有一個上下界。
 const BOUNDS = {
   MAX_INPUT_CHARS: [1, 20000],
-  MAX_TOKENS_DEFAULT: [1, 8192],
+  MAX_TOKENS_DEFAULT: [1, UPSTREAM_MAX_TOKENS_CEILING], // 設得比上游硬上限大沒意義（上游會靜默鉗掉）
   MAX_INFLIGHT: [1, 16],
   SLOT_WAIT_MS: [0, 60000],
   MAX_LINE_CHARS: [1, 8000],

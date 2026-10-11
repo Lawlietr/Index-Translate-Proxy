@@ -1,7 +1,7 @@
 // 並發閘（AGENTS.md 規則 7）與 env 讀取。設計理由見 design/streaming-and-chunking.md §2。
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { ConcurrencyGate, getGate, readLimits, gateFullResponse, DEFAULTS } from "../src/lib/limits.js"
+import { ConcurrencyGate, getGate, readLimits, UPSTREAM_MAX_TOKENS_CEILING, gateFullResponse, DEFAULTS } from "../src/lib/limits.js"
 
 test("readLimits：env 是字串，而且要夾在上界下限之間", () => {
   const d = readLimits({})
@@ -21,6 +21,12 @@ test("readLimits：env 是字串，而且要夾在上界下限之間", () => {
   // SLOT_WAIT_MS=0 是**有意**的設定（不排隊，滿了直接 429），不能被當成「沒給」而退回預設。
   assert.equal(readLimits({ SLOT_WAIT_MS: "0" }).slotWaitMs, 0)
   assert.equal(readLimits({ MAX_LINE_CHARS: "100000" }).maxLineChars, 8000, "單行上限也要夾住")
+})
+
+test("MAX_TOKENS_DEFAULT 的上界就是上游的硬上限（T1.1 實測：設更大也沒用，上游會靜默鉗）", () => {
+  assert.equal(readLimits({ MAX_TOKENS_DEFAULT: "3000" }).maxTokensDefault, 3000, "上限以內要聽設定的")
+  assert.equal(readLimits({ MAX_TOKENS_DEFAULT: "99999" }).maxTokensDefault, UPSTREAM_MAX_TOKENS_CEILING, "超過上限就夾到上限")
+  assert.equal(DEFAULTS.MAX_TOKENS_DEFAULT, UPSTREAM_MAX_TOKENS_CEILING, "預設本身就設在上限：沒有更高的空間可用")
 })
 
 test("tryAcquire：超過上限就 false", () => {

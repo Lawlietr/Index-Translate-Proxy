@@ -505,6 +505,30 @@ async function groupRaise() {
   }
 }
 
+async function groupCeiling() {
+  // T1.1：上游把 max_tokens 鉗在哪裡？上一輪看到 8192 停在**恰好** 4,096 → 那是「推定」，不是實測。
+  // 要證明它是**上限**而不是「剛好譯完了」，輸入要長到译文本身需要超過 4,096 tokens（zh→en ≈0.83 tok/字元
+  // → 6,000 字元 ≈ 5,000 tokens），同時把 max_tokens 要得比可疑上限大很多（16,384）。
+  // 判讀：停在恰好 4,096 且 finish=length → 4,096 是硬上限；超過 4,096 → 沒有那個上限，是剛好譯完。
+  const chars = 6000
+  const maxTokens = 16384
+  const t = numberedText(chars)
+  const r = await send({
+    headers: { 'content-type': 'application/json', 'user-agent': FIXED_UA },
+    body: chatPayload(t, { max_tokens: maxTokens, stream_options: { include_usage: true } }),
+  })
+  const p2 = r.status === 200 ? parseSse(r.raw) : null
+  const m = p2 ? countLineMarks(p2.text) : null
+  report('ceiling', 'max_tokens=16384/6000ch', r, {
+    in_lines: t.split(/\r?\n/).length,
+    got_lines: m?.marks,
+    finish: p2?.finish,
+    completion_tokens: p2?.usage?.completion_tokens,
+    out_chars: p2?.text.length,
+  })
+  if (r.status === 200) saveFixture("ceiling-16384.sse", r.raw)
+}
+
 const GROUPS = {
   selfcheck: groupSelfcheck,
   ua: groupUa,
@@ -517,6 +541,7 @@ const GROUPS = {
   quota: groupQuota,
   burst: groupBurst,
   raise: groupRaise,
+  ceiling: groupCeiling,
 }
 
 const picked = process.argv.slice(2).filter((a) => GROUPS[a])

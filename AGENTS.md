@@ -48,7 +48,7 @@
   或只給一行「好的，請提供需要翻譯的文本。」→ 行對應是**提示條件式**的，不是端點保證〔2026-10-08、2026-10-10〕 |
 | 未知模型 | 回 **400**（不是 404），body 用 `detail` 欄位而**不是** OpenAI 的 `error` 形狀，內容自報白名單：`Index-Translate-35B-A3B, index-mt-2b, index-mt-9b, index-mt-2b-syllable, index-mt-9b-syllable`。回顯的 `model` **不可信**：`index-mt-9b` → 200 且回 `qwen35-9b-6624275-iter999`（內部部署名）；`Index-Translate-35B-A3B-preview` → 200 但回 `Index-Translate-35B-A3B`（**靜默退回**）；`model:""` → 靜默用 35B-A3B；已撤回的 `index-homura-*` → 400。**逐個實測過**（`probe-upstream.mjs model lines`）：`index-mt-2b`/`index-mt-9b` 200、編號行逐行對應（8/8）、比 35B 快（545ms vs 2,026ms / 8 行）；兩個 `-syllable` 會破掉編號行（9b 只回 1/8 行就 `stop`、2b 把編號丟掉）→ 本代理放行前三者、擋掉 `-syllable`。回顯的內部部署名不能再送回去（會 400）。證據與決定：`design/model-allowlist.md`〔2026-10-10〕 |
 | 逾時 | 非串流且輸出超過 **10.0s** → 上游回 **HTTP 504**（openresty）。**SSE 是真增量**：TTFT 170–1,020ms 且**與輸入長度無關**；生成 2,000 tokens 要 16s、2,512 tokens 要 35.7s → 強制串流是必須的（規則 3）〔2026-10-10〕 |
-| **輸出上限** | 截斷發生在**輸出側**：預設完成上限 **2,048 tokens**，用完就停並回 **`finish_reason:"length"`**（所以丟尾**可偵測**）。同一份 zh→en 測試文本：輸入 ≤2,400 字元（41 行）完整；≥2,600 字元只回 42 行，且 3,000/4,000/6,000 三者的輸出完全同長。`max_tokens` **被精確尊重**（要 40 就停 40）；`max_tokens:4096` 下 3,040 字元完整譯完（51/51 行、2,512 tokens）；`max_tokens:8192` 停在恰好 4,096 → **推定上游把 max_tokens 鉗在 4,096**（未證實）。zh→en 膨脹比 ≈ 0.83 completion tokens／輸入字元。**舊說法「輸入 4,000 字元會截斷」不成立**〔2026-10-10〕 |
+| **輸出上限** | 截斷發生在**輸出側**：預設完成上限 **2,048 tokens**，用完就停並回 **`finish_reason:"length"`**（所以丟尾**可偵測**）。同一份 zh→en 測試文本：輸入 ≤2,400 字元（41 行）完整；≥2,600 字元只回 42 行，且 3,000/4,000/6,000 三者的輸出完全同長。`max_tokens` **被精確尊重**（要 40 就停 40）；`max_tokens:4096` 下 3,040 字元完整譯完（51/51 行、2,512 tokens）。**上游對 `max_tokens` 的硬上限就是 4,096**（已證，不再是推定）：`max_tokens:16384` ＋ 6,000 字元輸入 → 只給**恰好 4,096**、`finish_reason:"length"`、101 行只回 83 行（80.9s、TTFT 1.9s；prompt 4,103/completion 4,096）。〔2026-10-11，`node scripts/probe-upstream.mjs ceiling`，`tests/fixtures/ceiling-16384.summary.json`〕zh→en 膨脹比 ≈ 0.83 completion tokens／輸入字元。**舊說法「輸入 4,000 字元會截斷」不成立**〔2026-10-10〕 |
 | 可達性 | `index-translate.bilibili.com` CNAME → `bilicdn1.com`（海外節點 `103.151.151.x`，`x-cache-webcdn: BYPASS`）→ 不是只在中國大陸可達〔2026-10-08〕 |
 | **出口可達性（致命）** | **從 Worker 出口打上游，全部 412**：任意路徑／方法／UA（含瀏覽器 UA、不設 UA）、走 `http://` 也一樣，`www.bilibili.com/` 同樣 412，而 `api.ipify.org` 正常 200（出口 `2a06:98c0:…`，AS13335）。`cf.resolveOverride` 與 `cloudflare:sockets` 直連 bilicdn IP 都不能繞過（前者仍 412、後者零位元組回應）。上游無 AAAA → 不是 IPv6 問題〔2026-10-10，§8〕 |
 | **兩條路的成因與可用出口** | 412 的 body 是 **bilibili 自己的風控模板**（「触发…安全风控策略」／`{"code":-412,"message":"request was banned"}`），不是 CF 錯誤頁。成因：同一 host **依 client 解析到不同 CDN 前端** —— 從 Worker 落到 **CF 代理**（`server: cloudflare`）→ 風控 412；從**本機**或 **Vercel 出口**（AWS `54.172.44.226`／`iad1`）落到 bilibili 自家 `blzone*` webcdn（`server: uvicorn`、**無 `cf-ray`**）→ **200 ×6**（含 `GET /v1/models` 與真增量 SSE）。→ **已驗證可用的非 CF 出口：Vercel**（到上游 RTT 暖 228–235ms，比本機慢 5–6 倍）〔2026-10-10，§9–§10〕 |
@@ -111,7 +111,9 @@
    每一項都要在 README 看得到：`stream:true`（規則 3）、`chat_template_kwargs.enable_thinking:false`
    （官方要求客戶端顯式關閉，換端點不漏）、`stream_options:{include_usage:true}`
    （上游串流預設不給 `usage`，不補就沒有用量資料）、`max_tokens:4096`（上游預設 2,048 會截尾；
-   **客戶端自己帶 `max_tokens` 就尊重，不覆蓋**）。
+   **客戶端自己帶 `max_tokens` 就尊重，不覆蓋**）。第四項現在有實測支撐：**4,096 同時也是上游的硬上限**
+   （見事實表「輸出上限」列），所以這個注入值既不是保守值也不能再抬高。客戶端帶超過 4,096 的值時，上游會
+   **靜默**鉗掉 → 本代理不改他的值，只在 `x-proxy-hint` 說明尾部少的是誰造成的（規則 6）。
 10. **授權邊界：**MIT。上游 `bilibili/Index-Translate` 為 Apache-2.0、姐妹專案 `translate-cloud` 為 AGPL-3.0 →
     **可共用事實、概念與 prompt 結構，不得逐字複製兩者的程式碼**，除非先在授權層面做決定（保留出處聲明 /
     統一授權）。要複用就重寫。

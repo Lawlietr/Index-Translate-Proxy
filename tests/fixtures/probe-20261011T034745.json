@@ -1,0 +1,24 @@
+{
+  "ranAt": "2026-10-11T03:47:45.033Z",
+  "groups": [
+    "ceiling"
+  ],
+  "rows": [
+    {
+      "group": "ceiling",
+      "case": "max_tokens=16384/6000ch",
+      "status": 200,
+      "ms": 80910,
+      "firstByteMs": 1933,
+      "sse": true,
+      "bytes": 1037511,
+      "err": null,
+      "retryAfter": null,
+      "in_lines": 101,
+      "got_lines": 83,
+      "finish": "length",
+      "completion_tokens": 4096,
+      "out_chars": 20514
+    }
+  ]
+}

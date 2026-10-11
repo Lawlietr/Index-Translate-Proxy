@@ -72,6 +72,21 @@ export function hintHeader(text) {
   return { "x-proxy-hint": encodeURIComponent(text) }
 }
 
+/**
+ * 客戶自己帶的 `max_tokens` 超過上游硬上限時的事實與建議（規則 6 → 只放 `x-proxy-hint`）。
+ * 為什麼要有這一段：上游會**靜默**鉗到 4,096（實測：要 16,384 只給恰好 4,096、`finish_reason:"length"`），
+ * 客戶端只會看到「輸出變短」，看不到原因；不說話就會讓人以為是我們切掉的。
+ * 我們**不改**客戶端的值（規則 9），只把事實講出來。
+ */
+export function maxTokensCeilingHint(requested, ceiling) {
+  if (typeof requested !== "number" || !Number.isFinite(requested) || requested <= ceiling) return undefined
+  return (
+    `你帶的 max_tokens=${requested} 超過上游的硬上限 ${ceiling}（實測：要 16,384 時上游只給恰好 4,096，` +
+    `並回 finish_reason:"length"）。本代理不覆蓋你帶的值，但上游會靜默鉗到 ${ceiling} → 尾部可能少幾行，` +
+    `這不是本代理切掉的。要完整輸出請把單次輸入切短（少貼幾行），或讓插件每次少翻譯幾段。`
+  )
+}
+
 /** 針對上游狀態碼的建議（規則 6）。不猜原因，只給做過的事實與可動的參數。 */
 export function hintForStatus(status, { path, modelWhitelist }) {
   if (status === 412) {

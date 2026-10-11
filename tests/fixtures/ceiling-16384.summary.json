@@ -1,0 +1,40 @@
+{
+  "what": "T1.1：上游對 max_tokens 的硬上限。要 16,384，實際只給恰好 4,096 → 4,096 是**硬上限**，不是剛好譯完。",
+  "ranAt": "2026-10-11T03:47:45.033Z",
+  "how": "node scripts/probe-upstream.mjs ceiling（從本機出口，UA=Index-Translate-Proxy/1.0）",
+  "request": {
+    "endpoint": "POST https://index-translate.bilibili.com/v1/chat/completions",
+    "model": "index-mt-9b",
+    "max_tokens": 16384,
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "input_chars": 6000,
+    "input_lines": 101
+  },
+  "response": {
+    "status": 200,
+    "ms": 80910,
+    "first_byte_ms": 1933,
+    "sse_data_lines": 4099,
+    "finish_reason": "length",
+    "usage": {
+      "completion_tokens": 4096,
+      "prompt_tokens": 4103,
+      "total_tokens": 8199,
+      "prompt_tokens_details": {
+        "cached_tokens": 1
+      }
+    },
+    "output_lines_returned": 83,
+    "output_chars": 20514
+  },
+  "reading": [
+    "要 16,384 卻停在**恰好** 4,096 且 finish_reason=length → 4,096 是上游的硬上限（推定至此轉為實測）。",
+    "101 行只回 83 行：截斷在輸出側，且可用 finish_reason 偵測（規則 4）。",
+    "prompt 4,103 / completion 4,096：zh→en 這個樣本的 completion tokens ≈ 0.68/輸入字元，與先前 0.83 同量級（更保守的那側仍用 0.83）。",
+    "所以本代理注入的 max_tokens:4096 已等於上限；客戶端帶更大的值會被上游靜默鉗 → 只在 x-proxy-hint 講清楚，不改客戶端的值（規則 9）。"
+  ],
+  "raw_fixture_too_big_to_commit": "ceiling-16384.sse（1,037,511 bytes，.gitignore）"
+}

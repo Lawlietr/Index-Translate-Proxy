@@ -239,6 +239,45 @@ test("多塊是**依序**送，不是併發（上游無配額可查）", async (
   assert.equal(peak, 1, `同時進上游的請求數應為 1，實際 ${peak}`)
 })
 
+const decodedHint = (r) => {
+  const raw = r.headers.get("x-proxy-hint")
+  return raw ? decodeURIComponent(raw) : ""
+}
+
+test("T1.1 實測：上游把 max_tokens 靜默鉗在 4,096 → 不覆蓋客戶的值，但要在標頭說清楚", async () => {
+  echoUpstream()
+  const r = await call("/v1/chat/completions", post(chatBody("hi", { max_tokens: 16384, stream: false })))
+  assert.equal(calls[0].body.max_tokens, 16384, "規則 9：不覆蓋客戶端自己帶的值")
+  const hint = decodedHint(r)
+  assert.match(hint, /16384/, "要點名客戶帶的值，不然不知道在講什麼")
+  assert.match(hint, /4096/, "要寫出上游的硬上限")
+  assert.match(hint, /本代理不覆蓋/)
+  assert.match(hint, /不是本代理切掉的/)
+})
+
+test("低於上限的 max_tokens 不該嘮叨；沒帶也不該有 hint（預設注入就是上限）", async () => {
+  echoUpstream()
+  const r1 = await call("/v1/chat/completions", post(chatBody("hi", { max_tokens: 512, stream: false })))
+  assert.equal(decodedHint(r1), "")
+  const r2 = await call("/v1/chat/completions", post(chatBody("hi", { stream: false })))
+  assert.equal(calls.at(-1).body.max_tokens, 4096, "沒帶時注入的就是上限，沒有更高的空間")
+  assert.equal(decodedHint(r2), "", "注入的是我們自己选的默认值，不該叫客戶為他沒帶的值負責")
+})
+
+test("串流客戶也看得到這個 hint（看得到 finish_reason，看不到原因）", async () => {
+  echoUpstream({ finish: "length" })
+  const r = await call("/v1/chat/completions", post(chatBody("hi", { stream: true, max_tokens: 9000 })))
+  assert.equal(r.status, 200)
+  assert.match(decodedHint(r), /4096/)
+})
+
+test("別名 max_output_tokens 也算客戶帶的值（與 injectProtocolDefaults 一致），超過上限一樣給 hint", async () => {
+  echoUpstream()
+  const r = await call("/v1/chat/completions", post(chatBody("hi", { max_output_tokens: 7000, stream: false })))
+  assert.equal(calls[0].body.max_tokens, undefined, "帶了別名就不該再注入 max_tokens")
+  assert.match(decodedHint(r), /4096/)
+})
+
 test("規則 4：finish_reason:length 是可偵測的 —— 帶 x-proxy-chunk-truncated", async () => {
   echoUpstream({ finish: "length" })
   const r = await call("/v1/chat/completions", post(chatBody(lines(60, 40), { stream: false })))

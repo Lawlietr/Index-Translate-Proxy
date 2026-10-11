@@ -11,11 +11,12 @@ import {
   localError,
   hintHeader,
   hintForStatus,
+  maxTokensCeilingHint,
   proxyHeaders,
 } from "./lib/headers.js"
 import { checkAuth, checkAuthRateLimit, authConfigured, authMode, clientIp } from "./lib/auth.js"
 import { withBuildMarker } from "./lib/build-info.js"
-import { readLimits, getGate, gateFullResponse } from "./lib/limits.js"
+import { readLimits, getGate, gateFullResponse, UPSTREAM_MAX_TOKENS_CEILING } from "./lib/limits.js"
 import { ALLOWED_MODEL, ALLOWED_MODELS, modelsPayload, modelNotAllowed, modelNotAllowedMessage } from "./lib/model.js"
 import { findTranslatable, planChunks, bodyForChunk, overLongLine } from "./lib/chunk.js"
 import {
@@ -209,6 +210,13 @@ async function handleChat(request, route, limits, releaseGate) {
   // 每塊都是「原 body 換掉那段 content」再套協定層注入；其他欄位原樣（規則 9）。
   const probe = injectProtocolDefaults(body, limits)
   const clientSetMaxTokens = probe.clientSetMaxTokens
+  // 上游對 max_tokens 有一個**靜默**的硬上限（實測：要 16,384 只給恰好 4,096 + finish_reason:"length"，
+  // tests/fixtures/ceiling-16384.summary.json）。規則 9 不覆蓋客戶端的值，所以只在標頭把事實講清楚（規則 6）——
+  // 否則使用者只看到「尾部少了」，會以為是我們切塊切掉的。
+  const requestedMaxTokens = [body.max_tokens, body.max_completion_tokens, body.max_output_tokens].find(
+    (v) => typeof v === "number" && Number.isFinite(v),
+  )
+  const ceilingHint = maxTokensCeilingHint(requestedMaxTokens, UPSTREAM_MAX_TOKENS_CEILING)
   const bodies = target
     ? plan.chunks.map((_, i) => injectProtocolDefaults(bodyForChunk(body, target, plan, i), limits).body)
     : [probe.body]
@@ -266,6 +274,7 @@ async function handleChat(request, route, limits, releaseGate) {
       total,
       path: route.path,
       clientSetMaxTokens,
+      ceilingHint,
       linesBefore,
       t0,
       onDone: releaseGate,
@@ -320,6 +329,7 @@ async function handleChat(request, route, limits, releaseGate) {
       headers: mergeHeaders(
         corsHeaders(),
         JSON_HEADERS,
+        hintHeader(ceilingHint),
         proxyHeaders({
           upstreamStreamForced: true,
           chunks: total > 1 ? total : undefined,
@@ -355,7 +365,7 @@ async function collect(response) {
  * 串流路徑：逐塊透傳；塊之間插入「原分隔字元」的 delta（§4）；`[DONE]` 只在最後給一次。
  * 第一塊已成功 → status 一定是 200，後面的塊失敗只能寫在流裡（design §3 的邊界）。
  */
-function streamResponse({ first, rest, joins, total, path, clientSetMaxTokens, linesBefore, t0, onDone }) {
+function streamResponse({ first, rest, joins, total, path, clientSetMaxTokens, ceilingHint, linesBefore, t0, onDone }) {
   let template = null // 用上游给的 id/model/created 造分隔 delta，看起來是同一個回應的延續
   let doneChunks = 0
   let truncated = null
@@ -437,7 +447,8 @@ function streamResponse({ first, rest, joins, total, path, clientSetMaxTokens, l
       "cache-control": "no-cache",
       "x-proxy-upstream-stream": "forced",
       "x-proxy-chunks": total > 1 ? total : undefined,
-    }),
+      // 串流客戶看得到 finish_reason，但看不到「為什麼被截」→ 同一個 hint 也要給他們。
+    }, hintHeader(ceilingHint)),
   })
 }
 
