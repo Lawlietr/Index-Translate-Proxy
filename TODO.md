@@ -34,21 +34,26 @@
 
 ### T3 CI：GitHub Actions（AGENTS 規則 12；先能用，再加檢查）
 
-放在 `.github/workflows/`，跑在 GitHub 托管 runner。`origin` 是自建 Forgejo，`github` 是鏡像 → **推鏡像是 CI 的前置動作**（已成習惯：commit → 推 `origin` → 推 `github`）。
+放在 `.github/workflows/`，跑在 GitHub 托管 runner。`origin` 是自建 Forgejo，`github` 是鏡像 → **推鏡像是 CI 的前置動作**（已成習慣：commit → 推 `origin` → 推 `github`）。
 
 - ~~**T3.1** 只跑 `npm test` 的最小 workflow。~~（**已做**，2026-10-11：`.github/workflows/ci.yml`，
   `npm ci --omit=dev` ＋ `npm test`；首跑 `38105304395` 10 秒內綠。）
-- ~~**T3.2** 加 `npm run lint:readme` 與 `npm run lint:zh`。~~ ・ ~~**T3.3** 加 `npm run smoke`。~~
-  （**已做**，2026-10-11，`da441ca`）→ CI 現在是四步：`lint:zh` → `lint:readme` → `smoke` → `npm test`，
-  全部離線（`smoke` 用假 upstream）、不碰 secrets、不花上游配額。線上 run `38105805272` 已按步驟核對過
-  （lint 兩步綠、`smoke` 51 ok/0 fail、`# pass 82`），不是只有「本地跑過」（規則 13）。
-  ← 下一個停點是 **T3.4**：唯一需要 secrets 的一步，也是唯一能抵對**上游漂移**的機制。
-- ~~**T3.5** 在 workflow 註解與 `design/` 標明邊界。~~（**已做**：workflow 檔頭註解已寫；結論在 AGENTS 規則 12，
-  `design/` 不重複同一件事（規則 14）。）⏱0
-- **T3.4** 加 `node scripts/probe-live.mjs <生產 URL>`（base URL 與 key 放 GitHub Actions secrets；這是唯一碰 secrets 的一步，可推後）。⏱20
-  ← 這是唯一能對抗**上游漂移**的機制：事實表那些 ok/fail 都是某天的快照，而上游有撤回模型名稱的先例（`index-homura-*`）。
-- **T3.5** 在 workflow 註解與 `design/` 標明邊界：CI 只跑 `probe-live`（打已部署的入口），**不跑** `probe-upstream`（直接打上游）；CI 出口 ≠ 生產出口。⏱10
-- **T3.6（可選，不是待做）** 徽章進兩份 README：那是對外宣稱，等 CI 真的綠過再說。
+- ~~**T3.2** 加 `npm run lint:readme` 與 `npm run lint:zh`。~~ ・ ~~**T3.3** 加 `npm run smoke`。~~（**已做**，
+  2026-10-11，`da441ca`）→ `ci.yml` 現在是四步：`lint:zh` → `lint:readme` → `smoke` → `npm test`，全部離線
+  （`smoke` 用假 upstream）、不碰 secrets、不花上游配額。線上 run `38105805272` 已按步驟核對過（lint 兩步綠、
+  `smoke` 51 ok/0 fail、`# pass 82`），不是只有「本地跑過」（規則 13）。
+- ~~**T3.4** `probe-live` 打已部署入口（唯一碰 secrets 的一步）。~~（**已做**，2026-10-11，`fbf0e5a`：
+  `.github/workflows/live-probe.yml`，排程每日 07:17 UTC ＋ 可手動觸發。）放排程而不是放 push，三個理由：
+  它花**真的上游配額**（上游按出口 IP 限流，Vercel 的出口 IP 是共用池）；漂移按天發生、不按 commit 發生；
+  混進 push 的臨界路徑只會讓 CI 變成隨機紅。它的輸出是**漂移警示**，不進 `design/` 事實表（規則 12）。
+  - **T3.4a 設 repository secret（動作在使用者——我拿不到那把 key）** ⏱2：
+    `echo '<ITP_KEY>' | gh secret set ITP_PROBE_KEY`。沒有它，排程每天會在「需要 secrets」那一步明確失敗並附上
+    設定指引——這個行為已在 run `38106369535` 驗證過（不是假設）。選填 `ITP_PROBE_URL` 可換目標；不設就用
+    README 那個公開入口。
+- ~~**T3.5** 在 workflow 註解與 `design/` 標明 CI 出口邊界（只跑 `probe-live`、不跑 `probe-upstream`）。~~
+  （**已做**：檔頭註解兩個 workflow 都有，結論在 AGENTS 規則 12；`design/` 依規則 14 不重複同一件事。）
+- **T3.6（可選，不是待做）** 徽章進兩份 README：那是對外宣稱。`ci.yml` 已經綠過，但 `live-probe` 要先有
+  `ITP_PROBE_KEY` 才有意義 → 維持可選。而且對外徽章容易誤導（「你的部署也這樣嗎」），本專案的定位是自己用。
 
 ### T4 依語言方向收參數（只有 T1.2／T1.3 出了結果才動代碼）
 
@@ -102,6 +107,8 @@
   線上 `38105805272` 按步驟核對過（`smoke` 51 ok/0 fail、`# pass 82`）。
   另：繁簡字檢查限定在 `AGENTS.md`／`TODO.md`／`README.md` 三份，其他檔案不再做繁簡訂正；
   四處 `2026-10-12` 的時間戳結帳為 2026-10-11（用 commit 時戳核對，不是肉眼看）。
+  **T3.4 已交**：`.github/workflows/live-probe.yml` —— 排程 `probe-live` 打已部署入口，缺 `ITP_PROBE_KEY`
+  就明確失敗（不假裝測過）；只差把那把 secret 設進去（見待做 T3.4a）。
 - 2026-10-10：**放行清單上線並線上探測** —— 逐個測過 `index-mt-2b/9b/-syllable`（`design/model-allowlist.md`）→
   放行 `Index-Translate-35B-A3B`/`index-mt-9b`/`index-mt-2b`，`-syllable` 因會漏行／丟編號不放行；
   `GET /v1/models` 改由本代理自己回。重新部署後線上 `probe-live` **21 ok / 0 fail / 1 skip**（跳過的是 per-instance 併發閘）、

@@ -134,6 +134,8 @@
     **CI 的出口不是生產出口**：CI 只跑 `probe-live`（打已部署的入口），**不跑** `probe-upstream`（直接打上游）——
     同一 host 依 client 解析到不同的 CDN 前端（見上表「為什麼 412」那列），從 CI 出口拿到的結果不進 `design/` 的
     事實表。部署與線上入口都已在，所以 CI 現在可以排（見 TODO）。
+    **線上入口的排程探測**在 `.github/workflows/live-probe.yml`（一天一次，需 repository secret `ITP_PROBE_KEY`；
+    它打的是已部署入口，輸出同為**漂移警示**，不進事實表）。
 13. **部署是測試環的一環：**部署後必須用**真的線上入口**跑一次探測（`node scripts/probe-live.mjs <base>`；主入口現為
     Vercel；CF 入口是可選的備援、因出口 412 未啟用，只有在真的啟用時才需要跑一輪），至少覆蓋
     插件的 `/v1` 路徑形狀、UA（腳本 UA 打 worker 不該 412）、**放行清單真的能用（含 `index-mt-9b`）與不放行的名字回 400**、超長段的切塊接回、
