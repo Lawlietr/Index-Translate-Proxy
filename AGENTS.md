@@ -122,10 +122,13 @@
     （`scripts/readme-parity.mjs`）檢查：章節序列、表格行列與其中的代幣、非註解指令、連結、`<details>` 數量、
     正文中的數字（預設值／上限／測試數）都要一致；只有散文可以不同。部署按鈕的 `envDescription`／`envLink`
     是刻意各語言一份（指向自己那份 README），檢查器已正當化這兩項。
+    **繁簡字檢查只跑三份文件**（2026-10-11，重要的範圍限定）：`npm run lint:zh` 預設只掃 `AGENTS.md`、`TODO.md`、
+    `README.md`。其他檔案（`design/`、`probes/`、`src/`、`scripts/`、`tests/`）**不做繁簡字訂正**——
+    那裡繁簡混雜沒人在意，為一個字形去改檔是白花的時間；要掃別的自己帶路徑參數，但**不要把那種結果當成交付**。
 12. **CI 放 `.github/workflows/`（GitHub Actions），不放 `.forgejo/workflows/`。**
     `origin` 是自建 Forgejo 15.0.9，`github` remote 是它的鏡像（`Lawlietr/Index-Translate-Proxy`，已與 `main` 同步）——
     CI 用 GitHub 托管 runner，因為自建 runner 不是「常開就在那裡」的資源。**鏡像因此是必需的載體：
-    `git push github main` 要跟著推，不是可選。**（本條 2026-10-12 反轉：原寫「放 `.forgejo/workflows/`」。）
+    `git push github main` 要跟著推，不是可選。**（本條 2026-10-11 反轉：原寫「放 `.forgejo/workflows/`」。）
     **CI 的出口不是生產出口**：CI 只跑 `probe-live`（打已部署的入口），**不跑** `probe-upstream`（直接打上游）——
     同一 host 依 client 解析到不同的 CDN 前端（見上表「為什麼 412」那列），從 CI 出口拿到的結果不進 `design/` 的
     事實表。部署與線上入口都已在，所以 CI 現在可以排（見 TODO）。

@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // 規則 11：使用者可見文字與註解一律繁體中文。這裡只掃**常見簡體字**，
 // 不掃全部（會誤判簡體專有名詞與引用原文）；命中就列出，非零離開。
-// 跑法：node scripts/lint-zh.mjs [路徑...]   （預設掃 src scripts tests docs）
+// 跑法：node scripts/lint-zh.mjs [路徑...]（預設只掃規則 11 限定的三份文件，見下方 defaultRoots）
+// 規則 11（2026-10-11 限定）：繁簡字檢查只對 `AGENTS.md`、`TODO.md`、`README.md` 跑。
+// 其他檔案繁簡混雜沒人在意 → 不在預設範圍；要掃就自己帶路徑參數，但那種結果不算交付。
 import { readdirSync, readFileSync, statSync } from "node:fs"
 import { join, extname } from "node:path"
 
@@ -19,7 +21,8 @@ const BAD = new Set([
   "异", "弃", "补", "续", "个", "并", "档",
 ])
 
-const roots = process.argv.slice(2).length ? process.argv.slice(2) : ["src", "api", "probes", "scripts", "tests", "design", "README.md", "AGENTS.md", "TODO.md"]
+const defaultRoots = ["AGENTS.md", "TODO.md", "README.md"]
+const roots = process.argv.slice(2).length ? process.argv.slice(2) : defaultRoots
 // tests/fixtures 是上游回的具體內容（簡體），不是我們寫的文字 → 不掃。
 const SKIP_DIRS = new Set(["node_modules", ".git", "tmp", ".wrangler", ".forgejo", "results", "fixtures"])
 const EXT = new Set([".js", ".mjs", ".md", ".toml", ".json"])

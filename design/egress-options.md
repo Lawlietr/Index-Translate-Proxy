@@ -74,7 +74,7 @@ Netlify / Deno Deploy / Fastly Compute：**未測**，但它們同樣是「非 C
   （`upstream-probe-2026-10-10.md` §10，含 `GET /v1/models` 與真增量 SSE；生產入口的線上探測也過）
   → 規則 2 不需修改。
 
-## 4. 定案（2026-10-12）：換出口到此為止
+## 4. 定案（2026-10-11）：換出口到此為止
 
 **不再評估、也不再把它列為待做或問題提出。**理由不是「CF 那條路太貴」，而是**超出定位**：要連到上游，
 上游本來就提供公網端點（`/v1/chat/completions`）與官方的呼叫方式；本專案新增的只是一個
@@ -85,4 +85,4 @@ WARP egress、再換一個 serverless 平台）就是把薄代理變成**出口�
 保留不刪：本檔的比較與證據（同一個 host 有兩條路、CF 出口 412、Vercel 出口 200）、`src/worker.js`（CF 入口，
 不部署）。只有使用者**主動**決定動出口時才回來看這檔，而且要先探測證明能打到上游才談部署。
 一次性探測專案已全部清理（Vercel 的 `itp-vercel-probe`／`itp-egress-probe`，CF 的 `itp-ua-probe`／`itp-echo`；
-2026-10-12 在 dashboard 手動完成）——探測碼在 `probes/`，需要時重新部署即可。
+2026-10-11 在 dashboard 手動完成）——探測碼在 `probes/`，需要時重新部署即可。
