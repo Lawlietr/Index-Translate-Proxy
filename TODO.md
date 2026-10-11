@@ -34,14 +34,17 @@
 
 ### T3 CI：GitHub Actions（AGENTS 規則 12；先能用，再加檢查）
 
-放在 `.github/workflows/`，跑在 GitHub 托管 runner。`origin` 是自建 Forgejo，`github` 是鏡像 → **推鏡像是 CI 的前置動作**。
+放在 `.github/workflows/`，跑在 GitHub 托管 runner。`origin` 是自建 Forgejo，`github` 是鏡像 → **推鏡像是 CI 的前置動作**（已成習惯：commit → 推 `origin` → 推 `github`）。
 
 - ~~**T3.1** 只跑 `npm test` 的最小 workflow。~~（**已做**，2026-10-11：`.github/workflows/ci.yml`，
-  `npm ci --omit=dev` ＋ `npm test`；在 `git archive` 出來的乾淨副本上驗證過 82/82，測試不需要 `wrangler`/`vercel`。）
-  → 下一個停點是 **T3.2**；另外鏡像尚未推（T5 的 `git push github main`），不推就不會跑。
-- **T3.2** 加 `npm run lint:readme` 與 `npm run lint:zh`。⏱10
-  ← 對這個 repo 價值最高的一網：歷史統計是 92 次文件改動 vs 21 次代碼改動，而規則 11 要求兩份 README 100% 對等——這個不變量目前只靠人腦記得同步。
-- **T3.3** 加 `npm run smoke`。⏱5
+  `npm ci --omit=dev` ＋ `npm test`；首跑 `38105304395` 10 秒內綠。）
+- ~~**T3.2** 加 `npm run lint:readme` 與 `npm run lint:zh`。~~ ・ ~~**T3.3** 加 `npm run smoke`。~~
+  （**已做**，2026-10-11，`da441ca`）→ CI 現在是四步：`lint:zh` → `lint:readme` → `smoke` → `npm test`，
+  全部離線（`smoke` 用假 upstream）、不碰 secrets、不花上游配額。線上 run `38105805272` 已按步驟核對過
+  （lint 兩步綠、`smoke` 51 ok/0 fail、`# pass 82`），不是只有「本地跑過」（規則 13）。
+  ← 下一個停點是 **T3.4**：唯一需要 secrets 的一步，也是唯一能抵對**上游漂移**的機制。
+- ~~**T3.5** 在 workflow 註解與 `design/` 標明邊界。~~（**已做**：workflow 檔頭註解已寫；結論在 AGENTS 規則 12，
+  `design/` 不重複同一件事（規則 14）。）⏱0
 - **T3.4** 加 `node scripts/probe-live.mjs <生產 URL>`（base URL 與 key 放 GitHub Actions secrets；這是唯一碰 secrets 的一步，可推後）。⏱20
   ← 這是唯一能對抗**上游漂移**的機制：事實表那些 ok/fail 都是某天的快照，而上游有撤回模型名稱的先例（`index-homura-*`）。
 - **T3.5** 在 workflow 註解與 `design/` 標明邊界：CI 只跑 `probe-live`（打已部署的入口），**不跑** `probe-upstream`（直接打上游）；CI 出口 ≠ 生產出口。⏱10
@@ -55,9 +58,11 @@
 
 ### T5 定期家務
 
-- Vercel token 為 7 天效期（2026-10-10 簽發）：到期或外洩就在 dashboard 撤銷重發。部署走 `npm run deploy:vercel`
+- Vercel token 為 7 天效期（2026-10-10 簽發 → ≈ 10-17 到期）：到期或外洩就在 dashboard 撤銷重發。部署走 `npm run deploy:vercel`
   （需 `VERCEL_TOKEN`＋`VERCEL_TEAM_ID`，兩把都不寫進 repo）。`ITP_KEY` 目前兩側共用同一把，若要分開管理，在 Vercel 的
   Settings → Environment Variables 改。⏱5
+- CI 的 runner 注記（不碰協定碼）：`actions/checkout@v4`／`actions/setup-node@v4` 自報「Node 20 已棄用」警告（不影響結果），
+  `ubuntu-latest` 將於 2026-10-19 轉 Ubuntu 26 → 哪天換 `@v5` 即可。⏱5
 - 推鏡像：`git push github main`（CI 的載體，規則 12）。⏱1
 
 ## 已定案（不再列為待做，往後也不再重複提問）
@@ -88,12 +93,15 @@
 
 ## 已完成（最多五項，新在上）
 
-- 2026-10-11：**定位定案＋CI 起點** —— 一次性探測專案（Vercel 兩個、CF 兩個）已全部清理，`probes/README.md` 與
+- 2026-10-11：**定位定案＋ CI 起跑（T3.1→T3.3）** —— 一次性探測專案（Vercel 兩個、CF 兩個）已全部清理，`probes/README.md` 與
   `design/egress-options.md` 同步為「已刪除、可重新部署」；**CI 改到 GitHub Actions**（AGENTS 規則 12 反轉，
   `github` 鏡像是必需載體，並規定 CI 只跑 `probe-live`、不跑 `probe-upstream`）；「不花錢」「不再追換出口」
   寫入 AGENTS 規則 7／刻意不做／egress §4；待做拆成可分段交付的子任務（T1~T5）；同日 key 輪換結帳（見「已定案」）。
-  **T3.1 已交**：`.github/workflows/ci.yml`（只跑 `npm test`，走 `npm ci --omit=dev`）；同時把規則 11 的
-  繁簡字檢查限定在 `AGENTS.md`／`TODO.md`／`README.md` 三份，其他檔案不再做繁簡訂正。
+  **T3.1→T3.3 已交**：`.github/workflows/ci.yml` 現在是 `lint:zh` → `lint:readme` → `smoke` → `npm test` 四步，
+  全部離線（`smoke` 用假 upstream）、不碰 secrets、不花上游配額——規則 11 的兩個不變量自此由機器守，不靠人腦記得同步。
+  線上 `38105805272` 按步驟核對過（`smoke` 51 ok/0 fail、`# pass 82`）。
+  另：繁簡字檢查限定在 `AGENTS.md`／`TODO.md`／`README.md` 三份，其他檔案不再做繁簡訂正；
+  四處 `2026-10-12` 的時間戳結帳為 2026-10-11（用 commit 時戳核對，不是肉眼看）。
 - 2026-10-10：**放行清單上線並線上探測** —— 逐個測過 `index-mt-2b/9b/-syllable`（`design/model-allowlist.md`）→
   放行 `Index-Translate-35B-A3B`/`index-mt-9b`/`index-mt-2b`，`-syllable` 因會漏行／丟編號不放行；
   `GET /v1/models` 改由本代理自己回。重新部署後線上 `probe-live` **21 ok / 0 fail / 1 skip**（跳過的是 per-instance 併發閘）、

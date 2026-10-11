@@ -125,6 +125,8 @@
     **繁簡字檢查只跑三份文件**（2026-10-11，重要的範圍限定）：`npm run lint:zh` 預設只掃 `AGENTS.md`、`TODO.md`、
     `README.md`。其他檔案（`design/`、`probes/`、`src/`、`scripts/`、`tests/`）**不做繁簡字訂正**——
     那裡繁簡混雜沒人在意，為一個字形去改檔是白花的時間；要掃別的自己帶路徑參數，但**不要把那種結果當成交付**。
+    **兩項檢查都在 CI 跑**（`.github/workflows/ci.yml` 的 `lint:zh`／`lint:readme` 兩步，2026-10-11）：
+    這條規則不再只靠人腦記得同步。
 12. **CI 放 `.github/workflows/`（GitHub Actions），不放 `.forgejo/workflows/`。**
     `origin` 是自建 Forgejo 15.0.9，`github` remote 是它的鏡像（`Lawlietr/Index-Translate-Proxy`，已與 `main` 同步）——
     CI 用 GitHub 托管 runner，因為自建 runner 不是「常開就在那裡」的資源。**鏡像因此是必需的載體：
