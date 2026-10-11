@@ -1,10 +1,14 @@
-# CI —— 最小可用形態（TODO 的 T3.1）：只跑 `npm test`。
+# CI —— 目前跑到 TODO 的 T3.3：`lint:zh` ＋ `lint:readme` ＋ `smoke` ＋ `npm test`，全部離線。
 #
 # 為什麼放在 `.github/workflows/`（AGENTS 規則 12）：`origin` 是自建 Forgejo，`github` remote 是它的鏡像，
 # CI 用 GitHub 托管 runner——自建 runner 不是「常開就在那裡」的資源。所以推鏡像是 CI 的前置動作。
 #
-# 往後按 TODO 的順序加，不一次塞滿：T3.2 加 `lint:readme`／`lint:zh`（對這個 repo 價值最高的一網）、
-# T3.3 加 `smoke`、T3.4 才碰 secrets（`probe-live` 打生產入口）。
+# 順序是刻意的：兩份 README 的對等（規則 11）與繁簡字是這個 repo 最容易破、也最少被機器守住的東西
+# （歷史統計：92 次文件改動 vs 21 次代碼改動），所以放最前面、秒級失敗；`smoke` 用的是假 upstream
+# （`scripts/smoke-local.mjs`，不聯網、不打上游、不碰 secrets），最後才是 `node --test`。
+#
+# 下一個停點是 T3.4：`probe-live` 打已部署的生產入口——那是唯一需要 secrets 的一步，也是唯一能對抗
+# 上游漂移的機制（事實表那些 ok/fail 都是某天的快照，而上游有撤回模型名稱的先例 `index-homura-*`）。
 # 規則 12 的邊界：CI 只准跑 `probe-live`（打已部署的入口），不准跑 `probe-upstream`（直接打上游）——
 # CI 的出口不是生產出口，那樣的結果不能進 `design/` 的事實表。
 name: ci
@@ -40,6 +44,18 @@ jobs:
       # 之後若真有測試需要 devDependencies，把 --omit=dev 拿掉即可。
       - name: Install (production deps only)
         run: npm ci --omit=dev
+
+      # 規則 11：繁簡字檢查只掃 AGENTS.md／TODO.md／README.md 三份（其他檔案繁簡混雜不是工作）。
+      - name: Lint — 用字（規則 11）
+        run: npm run lint:zh
+
+      # 規則 11：兩份 README 必須 100% 對等。這個不變量之前只靠人腦記得同步。
+      - name: Lint — 兩份 README 結構對等（規則 11）
+        run: npm run lint:readme
+
+      # 協定層的回歸（規則 1／3／4／5／6／7／8／9）一次跑完：假 upstream，不聯網、不燒配額。
+      - name: Smoke（離線假 upstream）
+        run: npm run smoke
 
       - name: Test
         run: npm test
