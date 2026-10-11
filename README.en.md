@@ -191,6 +191,12 @@ a pulled key there — pull it somewhere throwaway (`vercel env pull /tmp/itp-en
 - The upstream is unreachable from Cloudflare egress (412), which is why the default entry point is Vercel.
 - The upstream models have token-decoding defects ("秦漢→秦漢"); a thin proxy does not repair upstream output.
 
+## 💗 Support this project
+
+If this project has been useful to you, you can buy me a coffee:
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/mulderlee/tip)
+
 ## Licence
 
 MIT (see [`LICENSE`](LICENSE)). The upstream [bilibili/Index-Translate](https://github.com/bilibili/Index-Translate)

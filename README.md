@@ -191,6 +191,12 @@ npm run lint:readme # 兩份 README 的結構對等檢查（改一份要同步�
 - 從 Cloudflare 出口打不到上游（412），所以預設入口是 Vercel。
 - 上游模型有代幣解碼缺陷（「秦漢→秦漢」）；薄代理不修上游的輸出。
 
+## 💗 支持這個專案
+
+如果您覺得這個專案有用，可以請我喝一杯咖啡：
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/mulderlee/tip)
+
 ## 授權
 
 MIT（見 [`LICENSE`](LICENSE)）。上游 [bilibili/Index-Translate](https://github.com/bilibili/Index-Translate)
