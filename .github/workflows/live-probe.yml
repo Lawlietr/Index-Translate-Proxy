@@ -1,0 +1,73 @@
+# 線上探測（TODO 的 T3.4；AGENTS 規則 13）：打**已部署的入口**，不是打本地、也不是直接打上游。
+#
+# 為什麼排程跑而不是每次 push 跑：
+#   1. 這一步會花**真的上游配額**（上游按出口 IP 限流，而 Vercel 的出口 IP 是共用池），push 一次測一次是浪費。
+#   2. 它要抓的是**上游漂移**——事實表那些 ok/fail 都是某天的快照，而上游有撤回模型名稱的先例（`index-homura-*`）。
+#      漂移是按天發生的，不是按 commit 發生的；把它塞進 push 的临界路径只会让 CI 变成随机红。
+#   3. push 那条路（`ci.yml`）保持全离线、确定性；這條是另一件事，所以分開一個 workflow。
+#
+# 這是規則 12 允許的那種探測：`probe-live` 打的是已部署入口，上游那一跳仍從 Vercel 出口出去（就是生產路徑）。
+# 差別只在 client 那一跳是 GitHub runner。因此：**這裡的输出只作漂移警示，不進 `design/` 的事實表**；
+# 要更新事實表就在自己機器上跑 `node scripts/probe-upstream.mjs` 並把證據寫進 `design/`。
+#
+# 需要的 repository secrets（Settings → Secrets and variables → Actions）：
+#   ITP_PROBE_KEY  必需。就是那份部署的 ITP_KEY（不是上游的 key——上游不需鑑權）。
+#   ITP_PROBE_URL  選填。不設就用 README 裡那個公開的生產入口。換網址時改這裡，不改 workflow。
+name: live-probe
+
+on:
+  schedule:
+    # 07:17 UTC（台北 15:17）。避開整點——GitHub 的排程在整點最擠。一天一次：上游漂移的節奏就是這樣。
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 同一時間只准一個探測在跑：並發跑會互搶上游配額，量出來的東西也不能互相比較。
+concurrency:
+  group: live-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: 對已部署入口跑 probe-live
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    # 探測只用 Node 內建（fetch／Web Streams），所以不裝任何依賴——`npm ci` 在這裡是多餘動作。
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # 缺 key 時探測會把每條 chat 請求測成 401，然後回一堆 FAIL——那是「沒測到」，不是「壞了」。
+      # 所以先擋下來講清楚缺什麼：沉默或假綠都比不上明確的失敗。
+      - name: 需要 secrets（缺 ITP_PROBE_KEY 就明確失敗，不假裝測過）
+        env:
+          PROBE_KEY: ${{ secrets.ITP_PROBE_KEY }}
+        run: |
+          if [ -z "$PROBE_KEY" ]; then
+            echo "::error::缺少 repository secret ITP_PROBE_KEY —— 它等於那份部署的 ITP_KEY。"
+            echo "設定方法：echo '<ITP_KEY>' | gh secret set ITP_PROBE_KEY --repo \$GITHUB_REPOSITORY"
+            echo "（或在 GitHub → Settings → Secrets and variables → Actions → Repository secrets 新增。）"
+            exit 1
+          fi
+          echo "ITP_PROBE_KEY 已取得（值不印出）。"
+
+      - name: probe-live（規則 13：線上入口才算數）
+        env:
+          PROBE_URL: ${{ secrets.ITP_PROBE_URL || 'https://index-translate-proxy.vercel.app' }}
+          PROBE_KEY: ${{ secrets.ITP_PROBE_KEY }}
+        run: node scripts/probe-live.mjs --url "$PROBE_URL" --key "$PROBE_KEY" --out results/live-github-actions.json
+
+      # 探測本身會印每條檢查的 ok/FAIL，這份摘要就是紀錄本身；這裡只補一行結構化的結果供 log 掃。
+      - name: 摘要
+        if: always()
+        run: |
+          if [ -f results/live-github-actions.json ]; then
+            node -e 'const r=JSON.parse(require("node:fs").readFileSync("results/live-github-actions.json","utf8"));const c=r.checks;const f=c.filter(x=>x.ok===false);console.log(`目標 ${r.base}：${c.filter(x=>x.ok===true).length} ok / ${f.length} fail / ${c.filter(x=>x.skipped).length} skip`);for(const x of f)console.log("FAIL " + x.name + "  " + (x.info||""));'
+          else
+            echo "沒有結果檔——探測在開始前就失敗（多半是缺 secrets 或入口不可達）。"
+          fi
