@@ -1,0 +1,45 @@
+# CI —— 最小可用形態（TODO 的 T3.1）：只跑 `npm test`。
+#
+# 為什麼放在 `.github/workflows/`（AGENTS 規則 12）：`origin` 是自建 Forgejo，`github` remote 是它的鏡像，
+# CI 用 GitHub 托管 runner——自建 runner 不是「常開就在那裡」的資源。所以推鏡像是 CI 的前置動作。
+#
+# 往後按 TODO 的順序加，不一次塞滿：T3.2 加 `lint:readme`／`lint:zh`（對這個 repo 價值最高的一網）、
+# T3.3 加 `smoke`、T3.4 才碰 secrets（`probe-live` 打生產入口）。
+# 規則 12 的邊界：CI 只准跑 `probe-live`（打已部署的入口），不准跑 `probe-upstream`（直接打上游）——
+# CI 的出口不是生產出口，那樣的結果不能進 `design/` 的事實表。
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 同一個 ref 上只留最新一次；探測與測試都不需要保留舊的並發跑。
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # package.json 的 engines 是 >=20；本地跑的是 22 → 用 22，別讓 CI 成為「只有 CI 用的版本」。
+          node-version: "22"
+          cache: npm
+
+      # 測試只用 Node 內建（`node --test` + Web Streams/fetch）：`wrangler` 與 `vercel` 是部署工具，不是測試依賴。
+      # 之後若真有測試需要 devDependencies，把 --omit=dev 拿掉即可。
+      - name: Install (production deps only)
+        run: npm ci --omit=dev
+
+      - name: Test
+        run: npm test

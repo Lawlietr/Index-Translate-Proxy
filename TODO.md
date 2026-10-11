@@ -36,7 +36,9 @@
 
 放在 `.github/workflows/`，跑在 GitHub 托管 runner。`origin` 是自建 Forgejo，`github` 是鏡像 → **推鏡像是 CI 的前置動作**。
 
-- **T3.1** 只跑 `npm test` 的最小 workflow。⏱20 ← **這是可用的最小停點**
+- ~~**T3.1** 只跑 `npm test` 的最小 workflow。~~（**已做**，2026-10-11：`.github/workflows/ci.yml`，
+  `npm ci --omit=dev` ＋ `npm test`；在 `git archive` 出來的乾淨副本上驗證過 82/82，測試不需要 `wrangler`/`vercel`。）
+  → 下一個停點是 **T3.2**；另外鏡像尚未推（T5 的 `git push github main`），不推就不會跑。
 - **T3.2** 加 `npm run lint:readme` 與 `npm run lint:zh`。⏱10
   ← 對這個 repo 價值最高的一網：歷史統計是 92 次文件改動 vs 21 次代碼改動，而規則 11 要求兩份 README 100% 對等——這個不變量目前只靠人腦記得同步。
 - **T3.3** 加 `npm run smoke`。⏱5
@@ -66,9 +68,9 @@
   理由：要連到上游，上游本來就提供公網端點與官方的呼叫方式；本專案只補一個 client 能用的同形狀端點，
   不自己維護一條網路。Vercel 出口已可用，這就夠 → `design/egress-options.md` §4。
 - 既有 `design/` 文件與 `src/worker.js`（CF 入口）**保留不刪**。
-- **key 衛生**（2026-10-12 已做）：README 公開過的示範 key 已輪換（Production／Preview／Development 三個環境都換、
+- **key 衛生**（2026-10-11 已做）：README 公開過的示範 key 已輪換（Production／Preview／Development 三個環境都換、
   重新部署、`probe-live` 用新 key 重跑 21/0/1），README 裡出現 0 次。往後規則：**實際用的 key 一律不進文件**。
-- **一次性探測資源已清理**（2026-10-12，dashboard 手動完成）：Vercel 的 `itp-vercel-probe`／`itp-egress-probe`、
+- **一次性探測資源已清理**（2026-10-11，dashboard 手動完成）：Vercel 的 `itp-vercel-probe`／`itp-egress-probe`、
   CF 的 `itp-ua-probe`／`itp-echo`。探測碼在 `probes/`，證據在 `design/`；要重現照 `probes/README.md` 重新部署即可。
 
 ## 可選（**不是待做**，也已定案不啟用）：Cloudflare Worker 入口
@@ -81,15 +83,17 @@
 - `wrangler.toml` 明確寫 `workers_dev = true` / `preview_urls`（消除部署警告），把預設值寫進 `[vars]`。
 - **Deploy to Cloudflare 按鈕**（[`design/deploy-button.md`](design/deploy-button.md)）：鏡像已建、已 public、`main` 已開、
   `[[ratelimits]]` 已有預設值 → 剩下放按鈕與手動三行退路。
-- ~~清掉 CF 的一次性資源：`itp-ua-probe`、`itp-echo`~~（**已做**，2026-10-12）。
+- ~~清掉 CF 的一次性資源：`itp-ua-probe`、`itp-echo`~~（**已做**，2026-10-11）。
 - 真的啟用了才照規則 13 跑一次 `probe-live`／`probe-sse-timing`，並記錄出口狀態（412 本身也是要記錄的結果）。
 
 ## 已完成（最多五項，新在上）
 
-- 2026-10-12：**文件結帳與定位定案** —— 一次性探測專案（Vercel 兩個、CF 兩個）已全部清理，`probes/README.md` 與
+- 2026-10-11：**定位定案＋CI 起點** —— 一次性探測專案（Vercel 兩個、CF 兩個）已全部清理，`probes/README.md` 與
   `design/egress-options.md` 同步為「已刪除、可重新部署」；**CI 改到 GitHub Actions**（AGENTS 規則 12 反轉，
   `github` 鏡像是必需載體，並規定 CI 只跑 `probe-live`、不跑 `probe-upstream`）；「不花錢」「不再追換出口」
-  寫入 AGENTS 規則 7／刻意不做／egress §4；待做拆成可分段交付的子任務（T1~T5）。同日 key 輪換結帳（見「已定案」）。
+  寫入 AGENTS 規則 7／刻意不做／egress §4；待做拆成可分段交付的子任務（T1~T5）；同日 key 輪換結帳（見「已定案」）。
+  **T3.1 已交**：`.github/workflows/ci.yml`（只跑 `npm test`，走 `npm ci --omit=dev`）；同時把規則 11 的
+  繁簡字檢查限定在 `AGENTS.md`／`TODO.md`／`README.md` 三份，其他檔案不再做繁簡訂正。
 - 2026-10-10：**放行清單上線並線上探測** —— 逐個測過 `index-mt-2b/9b/-syllable`（`design/model-allowlist.md`）→
   放行 `Index-Translate-35B-A3B`/`index-mt-9b`/`index-mt-2b`，`-syllable` 因會漏行／丟編號不放行；
   `GET /v1/models` 改由本代理自己回。重新部署後線上 `probe-live` **21 ok / 0 fail / 1 skip**（跳過的是 per-instance 併發閘）、
