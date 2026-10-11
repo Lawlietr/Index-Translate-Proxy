@@ -136,7 +136,9 @@
     **CI 的出口不是生產出口**：CI 只跑 `probe-live`（打已部署的入口），**不跑** `probe-upstream`（直接打上游）——
     同一 host 依 client 解析到不同的 CDN 前端（見上表「為什麼 412」那列），從 CI 出口拿到的結果不進 `design/` 的
     事實表。部署與線上入口都已在，所以 CI 現在可以排（見 TODO）。
-    **線上入口的排程探測**在 `.github/workflows/live-probe.yml`（一天一次 07:17 UTC，需 repository secret
+    **CI 只有一條路（2026-10-11 定案）**：GitHub Actions 一份 `ci.yml`＋一份 `live-probe.yml`。自建 Forgejo
+    不放 workflow、不加 runner，README 不加狀態徽章——所以往後不必再問「要不要補 Forgejo 的 CI」。
+ `.github/workflows/live-probe.yml`（一天一次 07:17 UTC，需 repository secret
     `ITP_PROBE_KEY` = 那份部署的 `ITP_KEY`；它打的是已部署入口，輸出同為**漂移警示**，不進事實表）。
     已接通並跑綠（2026-10-11，`38107205187`）。**踩過的坑（留起來）**：首跑 15 個 401——Vercel 複製環境變數
     時會把**變數名稱一起複製**，所以貼進去的 secret 帶著 `ITP_KEY=` 前綴。判別方法：401 的 body 是本代理自己的
