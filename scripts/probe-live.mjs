@@ -113,7 +113,7 @@ async function main() {
     check("未設 ITP_KEY 時 chat 請求回 503（不假裝能用）", true, "")
     const r = await call("/v1/chat/completions", { method: "POST", body: JSON.stringify({ model: ALLOWED_MODEL, messages: [{ role: "user", content: "你好" }] }) })
     check("未設 ITP_KEY 時 chat 請求回 503", r.res.status === 503, r.res.status)
-    console.log("\n線上還沒設 ITP_KEY，先跑 `wrangler secret put ITP_KEY` 再探一次。")
+    console.log("\n線上還沒設 ITP_KEY：Vercel 在 Environment Variables 加（或 Secret），CF 則 `wrangler secret put ITP_KEY`；設好再探一次。")
     return
   }
 

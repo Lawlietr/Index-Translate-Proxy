@@ -161,7 +161,7 @@ How to check whether something was cut: for non-streaming responses look at `x-p
 
 ```bash
 npm run dev       # local miniflare (reads .dev.vars), real upstream; http://127.0.0.1:8787
-npm test          # 82 offline tests (fake fetch injected, no network)
+npm test          # offline tests (fake fetch injected, no network; the count changes, so it is not written here)
 npm run smoke     # 51 end-to-end smoke checks (worker inside the process)
 npm run serve-bridge  # serve the Vercel entry with Node (no login, real upstream) → then run probe-live against http://127.0.0.1:8788
 npm run dev:vercel    # run locally via the Vercel CLI (requires `vercel login`)
@@ -175,6 +175,11 @@ There is a single copy of the protocol code (`src/lib/`); the entry points are o
 [`design/`](design/); the non-negotiable rules in [`AGENTS.md`](AGENTS.md); the to-do list in [`TODO.md`](TODO.md)
 — these three are internal documents, in Chinese only. Every upstream fact quoted here (UA blacklist, quota, output limits…) was
 **measured by us**: `node scripts/probe-upstream.mjs`.
+
+The live probe takes its key via `--key` (or the `PROXY_KEY` environment variable) — **that is not the deployment's
+`ITP_KEY`**, and this is a trap we fell into: `ITP_KEY=… node scripts/probe-live.mjs …` sends no key, and the probe
+then reports a wall of 401s while the endpoint is fine. Also, `vercel deploy` **rewrites `.env.local`**, so do not keep
+a pulled key there — pull it somewhere throwaway (`vercel env pull /tmp/itp-env`).
 
 </details>
 

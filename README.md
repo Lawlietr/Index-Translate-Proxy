@@ -163,7 +163,7 @@ curl -s -w "\nHTTP %{http_code}\n" -X POST "$B/v1/chat/completions" -H "content-
 
 ```bash
 npm run dev       # 本地 miniflare（讀 .dev.vars），打真上游；http://127.0.0.1:8787
-npm test          # 82 條離線測試（注入假的 fetch，不碰網路）
+npm test          # 離線測試（注入假的 fetch，不碰網路；數字會變，所以不寫在文件裡）
 npm run smoke     # 51 項端到端冒煙（程序內跑 worker）
 npm run serve-bridge  # 用 Node 起 Vercel 入口（不需登入，打真上游）→ 再對 http://127.0.0.1:8788 跑 probe-live
 npm run dev:vercel    # 用 Vercel CLI 跑本地（需要 `vercel login`）
@@ -171,6 +171,11 @@ npm run lint:zh   # 註解與使用者文字一律繁體（規則 11）
 node scripts/probe-upstream.mjs --quick   # 上游行為重測，結果存 tests/fixtures/
 npm run lint:readme # 兩份 README 的結構對等檢查（改一份要同步另一份）
 ```
+
+線上探測的 key 走 `--key`（或環境變數 `PROXY_KEY`）——**名字跟部署端的 `ITP_KEY` 不同**，這是踩過的坑：
+用 `ITP_KEY=… node scripts/probe-live.mjs …` 不會帶上 key，探測會一片 401（不是端點壞了）。
+另外 `vercel deploy` 會**重寫 `.env.local`**，所以不要把 pull 下來的 key 存在那裡：
+`vercel env pull /tmp/itp-env` 之類，臨時用、不會被蓋掉。
 
 協定碼只有一份（`src/lib/`），入口只做平台橋：`api/index.js`（Vercel，主）、`src/worker.js`（CF，保留）。
 設計、實測紀錄與定案在 [`design/`](design/)；不可妥協的規則在 [`AGENTS.md`](AGENTS.md)；待辦在 [`TODO.md`](TODO.md)（這三個都是內部文件，只有中文）。
