@@ -19,6 +19,8 @@
 > 但**要先解決出口**才算能用。原因已定：那個域名**依 client 解析到不同的 CDN 前端**，從 Worker 出去會落到
 > bilibili 的 **CF 代理那一側**而被風控擋掉；**已驗證從 Vercel 出口能打到上游**（§10）。
 > 選項與證據：`design/upstream-probe-2026-10-10.md` §8–§10、`design/egress-options.md`。
+> **這段講的是 CF 那份入口**（代碼保留、不啟用）；現行主入口是 Vercel，已上線可用。換出口的事已定案，
+> 不再評估也不再重復提問：`design/egress-options.md` §4。
 
 **License: MIT.**（上游是 Apache-2.0，無傳染性；規則 10 講清楚邊界。）
 
@@ -91,10 +93,12 @@
    切塊依序送、同時只有一塊在途），不是上游塊；一個拆三塊的請求仍只佔一個 slot，但消耗三次上游配額。
    閘滿先在**本地排隊**（`SLOT_WAIT_MS`，預設 15 秒），等不到才回 **429 + `Retry-After: 2`**，並建議把插件的
    「每秒最大請求數」設 3~5。上游的配額是**按 IP** 的（見上表「配額」列），而 Worker 的 egress IP 是共用池 →
-   保護只能自己做；上游回的 429 與 `retry-after` 要原樣透傳（規則 6）。细节在 `design/streaming-and-chunking.md` §2。
+   保護只能自己做；上游回的 429 與 `retry-after` 要原樣透傳（規則 6）。細節在 `design/streaming-and-chunking.md` §2。
    **但這個閘在兩個平台都是 per-instance**（2026-10-10 線上實測：Vercel 把 12 個併發分散到 6+ 個實例，一個都不擋；
    線上探測因此對這一項只驗證 429 的**形狀**，不宣稱全域保護）。真的全域閘需 Durable Objects（CF）或外部計數
-   （Vercel，付費）→ v1 不做了，所以**規則 7 是盡力而為的保護，主要防線仍是插件端的並發設定**。
+   （Vercel，付費）**已定案不做**：這份部署不依賴任何付費服務，也不為一把併發計數升級或換平台。
+   因此**規則 7 是 per-instance 的盡力而為**（不是全域保證），主要防線是插件端的並發設定（README 已寫 3~5）；
+   錯誤訊息與文件都不宣稱全域保護，往後也不再重新評估這一項。
 8. **先鑑權，再轉發；key 不進上游。** worker 必須先驗證**這一份部署的 `ITP_KEY`**（讀 `Authorization: Bearer`，
    退回 `x-api-key`；設計與錯誤形狀見 `design/auth.md`）。**沒有 `ITP_KEY` 就一律回 503**——這個代理是
    給自己部署、自己用的，不做匿名公開端點。鑑權在**任何上游請求之前**完成，401 不消耗上游配額；
@@ -118,8 +122,13 @@
     （`scripts/readme-parity.mjs`）檢查：章節序列、表格行列與其中的代幣、非註解指令、連結、`<details>` 數量、
     正文中的數字（預設值／上限／測試數）都要一致；只有散文可以不同。部署按鈕的 `envDescription`／`envLink`
     是刻意各語言一份（指向自己那份 README），檢查器已正當化這兩項。
-12. **CI 放 `.forgejo/workflows/`，不放 `.github/workflows/`**（`origin` 是自建 Forgejo 15.0.9）。
-    程式碼已在，所以 CI 是該補的一項（見 TODO）；但在它之前，**部署與線上探測優先**。
+12. **CI 放 `.github/workflows/`（GitHub Actions），不放 `.forgejo/workflows/`。**
+    `origin` 是自建 Forgejo 15.0.9，`github` remote 是它的鏡像（`Lawlietr/Index-Translate-Proxy`，已與 `main` 同步）——
+    CI 用 GitHub 托管 runner，因為自建 runner 不是「常開就在那裡」的資源。**鏡像因此是必需的載體：
+    `git push github main` 要跟著推，不是可選。**（本條 2026-10-12 反轉：原寫「放 `.forgejo/workflows/`」。）
+    **CI 的出口不是生產出口**：CI 只跑 `probe-live`（打已部署的入口），**不跑** `probe-upstream`（直接打上游）——
+    同一 host 依 client 解析到不同的 CDN 前端（見上表「為什麼 412」那列），從 CI 出口拿到的結果不進 `design/` 的
+    事實表。部署與線上入口都已在，所以 CI 現在可以排（見 TODO）。
 13. **部署是測試環的一環：**部署後必須用**真的線上入口**跑一次探測（`node scripts/probe-live.mjs <base>`；主入口現為
     Vercel；CF 入口是可選的備援、因出口 412 未啟用，只有在真的啟用時才需要跑一輪），至少覆蓋
     插件的 `/v1` 路徑形狀、UA（腳本 UA 打 worker 不該 412）、**放行清單真的能用（含 `index-mt-9b`）與不放行的名字回 400**、超長段的切塊接回、
@@ -154,5 +163,8 @@
 - **公共共用實例與示範 key**：本專案的用途就是讓使用者自己部署一份自己用。README 不給「拿來就用」的網址，
   也不公開實際的 key（公開過的那把已輪換作廢）。
 - KV / Cache 快取（免費層寫入配額低，翻譯請求重複率低）。
+- **需要付費的服務，與自建出口設施**：兩個平台都只用免費層，不為快取、跨實例計數或任何狀態服務升級；
+  也不自架 connector、不追加一條自己維護的網路去連上游——要連到上游，上游本來就提供公網端點與官方呼叫方式，
+  本專案只補一個 client 能用的同形狀端點。理由與證據：`design/egress-options.md` §4。
 - DeepL／其他協定的適配層——只做 OpenAI 相容這一條。
 - 上游健康檢查或模型探測（`/v1/models` 查不出未宣告模型的可用性，白花一次請求；姐妹專案規則 12 同一結論）。
