@@ -1,0 +1,20 @@
+{
+  "_note": [
+    "這是一份**範本**，不是生效的設定：把 mcpServers 裡那個條目合併進你 client 自己的設定檔，",
+    "或者直接 `cp mcp.json.example mcp.json` 再填（`mcp.json` 已被 .gitignore 抵掉，不會進 repo）。",
+    "ITP_KEY 必須等於你那份部署的 ITP_KEY；產生一把：openssl rand -hex 32。",
+    "這個 repo 是公開可讀的，所以 key 只出现在你本地的副本，不在這裡。"
+  ],
+  "mcpServers": {
+    "index-translate": {
+      "command": "node",
+      "args": ["examples/mcp/server.mjs"],
+      "env": {
+        "ITP_KEY": "",
+        "ITP_BASE": "https://<你的專案>.vercel.app"
+      },
+      "timeout": 300,
+      "description": "翻譯服務（bilibili Index-Translate，經 Index-Translate-Proxy）：translate、index_translate_models 兩個工具。文件、註解、README、大段文字一律交給它翻，不要自己逐字翻"
+    }
+  }
+}

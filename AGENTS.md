@@ -168,7 +168,9 @@
 
 14. **文件分工：**`TODO.md` 只放待做項目、一個**明確標為「可選／不是待做」**的區塊（目前放 CF 入口那組：代碼保留、但不排進工作），與最多五項已完成（置底）；設計、實測紀錄、規格拆解一律放
     `design/`；更早的完成紀錄查 `git log --oneline`。同一件事的真相只能有一處——`AGENTS.md` 寫結論，
-    證據與細節放 `design/`，`TODO.md` 只寫「要做什麼」。
+    證據與細節放 `design/`，`TODO.md` 只寫「要做什麼」。**可重跑的程式也在 repo**：證據用的一次性探測放
+    `probes/`、client 範例放 `examples/`（兩者都不參與 `npm test`、不被入口 import）——`/tmp` 裡的腳本
+    撐不過一次會話，而 `design/` 的結論要能被別人重跑。
 15. **對外文件不提未公開的專案：**姐妹專案仍在開發、短時間不會公開 → `README.md`（還有未來網站／說明檔）
     **不出現其名稱與內網 URL**（`192.168.x.x` 那種連結對外一定是碎的）。`AGENTS.md`、`design/` 這些 contributor
     文件可以提，但首次提到要標「未公開」，而且**引用過的事實要在本 repo 留下自己的實測證據**，
@@ -182,6 +184,15 @@
     Vercel 的 Node/serverless runtime 會把 SSE 緩衝（純 SSE 探測函式亦復如此），而規則 3 要靠真串流
     避開上游 10s 的 504；Edge 的限制是「25s 內開始回、可串流到 300s」，上游 TTFT 0.2–1.0s 因此余裕很大。
     `src/lib/vercel-node-adapter.js`（Node 版）留著但不部署──它是那場誤判的標本。
+
+17. **通行碼不進 repo（2026-10-13）。**這個鏡像是**公開可讀**的（規則 12），所以 `ITP_KEY` 只存在三處：
+    Vercel 的 Secret、本地的 `.dev.vars`／`mcp.json`（兩者已被 `.gitignore` 抵掉）、client 的環境變數。
+    **不寫進程式、不寫進文件、不貼進 issue 或 commit 訊息**；範本檔的值一律留空
+    （`.dev.vars.example`、`examples/mcp/mcp.json.example`）。這條由 `npm run lint:secret`（CI 第一步）守，
+    不靠人記得：它掃 `git ls-files` 找 64 位 hex（`openssl rand -hex 32` 的形狀）與 `ITP_KEY=<真值>` 的賦值；
+    commit sha 與測試用的假 sha 都是 40 位，不在這個形狀裡 → 不會出現那種逼人關掉的假警報。
+    **負向測試做過**：拿真的 client 設定檔對它跑 → 紅、抓到兩處 64-hex。「它現在是綠的」不等於
+    「這個檢查有效」，兩件事要分開證。理由：key 一旦進去就要改歷史，不是改一個檔就能了結。
 
 ## 待辦
 

@@ -17,6 +17,8 @@ Use it for:
 
 - **Web page translation**: put your own URL into Immersive Translate's "Translation service → OpenAI → custom API endpoint" field.
 - **Any OpenAI-compatible client**: `curl`, the OpenAI SDKs, LangChain and friends — just set the base URL.
+- **Hand translation to an agent**: if you want your agent (pi, Claude Desktop, any other MCP client) to translate
+  documents and comments by itself, [`examples/mcp/`](examples/mcp/README.md) ships a working MCP client and how to wire it up (the passcode comes from an environment variable and never enters the repo).
 - **Your own translation backend**: a translation exit for your own apps and scripts that needs no GPU and costs nothing.
 
 Why a proxy is needed in the middle, and what it deliberately does not solve: [`design/why-proxy.md`](design/why-proxy.md) (Chinese).

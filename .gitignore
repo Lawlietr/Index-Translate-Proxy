@@ -7,6 +7,11 @@ wrangler.log
 .env
 .env.local
 
+# MCP client 的本地設定檔：裡面有真的 ITP_KEY，公開的 repo 不能進（規則 17）。
+# 範本在 examples/mcp/mcp.json.example（值留空）；`npm run lint:secret` 是它的後盾。
+examples/mcp/mcp.json
+examples/mcp/.dev.vars
+
 # 探測產出的大個 SSE（>200KB）只留本地做除錯；數字已寫進 design/upstream-probe-*.md，小個 fixture 才進 repo
 tests/fixtures/len-*.sse
 tests/fixtures/raise-*.sse

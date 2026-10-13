@@ -121,6 +121,15 @@
 - 真的啟用了才照規則 13 跑一次 `probe-live`／`probe-sse-timing`，並記錄出口狀態（412 本身也是要記錄的結果）。
 
 ## 已完成（最多五項，新在上）
+- 2026-10-13：**把代理接成 agent 的工具（`examples/mcp/`）＋ 通行碼的界線交給機器守** —— MCP client 的母本進
+  repo（`server.mjs`、`mcp.json.example` 值留空、用法在該目錄的 README），證據與取捨在
+  `design/mcp-client.md`；從 pi 內部真的呼叫過兩個工具（行對應 2/2、放行清單即時）。順帶拿到兩件事：
+  （一）**非串流的 client 會自己撞上 Vercel 的 25s**（那是「開始回」的制限，不是總長）——同一份 40 行輸入
+  25.5s 被砍成 504（body 是 Vercel 的錯誤頁，不是上游的），改走 SSE 後 44.9s 完整接回 40/40；
+  （二）**截尾偵測在兩條路上不完對稱**：組包的 top-level `finish_reason` 只取最後一塊（`src/lib/stream.js:171`），
+  中間塊被截只在 `x-proxy-chunk-truncated` 標頭看得到，而串流反而有逐塊視野（實測 `["stop","stop"]`）。
+  協定碼未動（規則 6 不包層），只記錄。另新增**規則 17**（通行碼不進 repo）與 `npm run lint:secret`
+  （已進 CI 第一步，負向測試做過：對真的 client 設定檔是紅的）。
 - 2026-10-11：**上游 `max_tokens` 硬上限證實 ＋「尾部少了」變成使用者能照做的說明**（`3f4b42a`、`6a82d93`）——
   一檔 `max_tokens:16384` 把 AGENTS 事實表最後一個「推定」換成實測（4,096 是硬上限，證據
   `tests/fixtures/ceiling-16384.summary.json` + `design/upstream-probe-2026-10-10.md` §11）；由它推出來的是
@@ -167,6 +176,4 @@
   `api/index.js`，協定碼不重複），`probe-live` 全過、`probe-sse-timing` 兩側都**真增量**（首塊 434ms、跨度 1,112ms ≈ 上游 1,148ms）。
   同時把 CF 那份也重新部署並探測：本地行為全過、**上游全部 412** → 印證「CF 出口那側被風控擋」。
   新增 `scripts/probe-sse-timing.mjs`（用 curl 當 client，因為本機 JS client 會把 SSE 合併成一批，量出來的「緩衝」是假象）。
-- 2026-10-10：**出口可行性實測** —— 一次性 Vercel 探測函式 → **從 Vercel 出口打上游 200 ×6**（`/v1/models` 與 3 行串流翻譯，
-  SSE 真增量），並拿到成因：同一 host 依 client 解析到不同 CDN 前端（CF 代理 = 412；bilicdn `uvicorn` = 200）。
-  新增 `design/egress-options.md`（五個出口方案的已測/未測/規格）與 probe §10；AGENTS 事實表新增兩列。
+

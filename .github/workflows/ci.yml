@@ -45,6 +45,11 @@ jobs:
       - name: Install (production deps only)
         run: npm ci --omit=dev
 
+      # 規則 17：這個 repo 是公開可讀的鏡像，通行碼不該進來。放在對等檢查之前不是優先級問題，
+      # 是成本問題：key 一旦進去就要改歷史，不是改一個檔就能了結。
+      - name: Lint — 沒有通行碼進 repo（規則 17）
+        run: npm run lint:secret
+
       # 規則 11：繁簡字檢查只掃 AGENTS.md／TODO.md／README.md 三份（其他檔案繁簡混雜不是工作）。
       - name: Lint — 用字（規則 11）
         run: npm run lint:zh

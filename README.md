@@ -17,6 +17,8 @@
 
 - **網頁翻譯**：沉浸式翻譯（Immersive Translate）的「翻譯服務 → OpenAI → 自訂接口地址」填你自己的網址。
 - **任何 OpenAI 相容 client**：`curl`、OpenAI SDK、LangChain 之類的工具，填 base URL 就能用。
+- **交給 agent 翻譯**：想讓 agent（pi、Claude Desktop、其他 MCP client）自己把文件跟註解翻掉，
+  [`examples/mcp/`](examples/mcp/README.md) 有一份現成的 MCP client 與它的接法（通行碼走環境變數，不進 repo）。
 - **自己的翻譯後端**：給自家 app／腳本一個不用 GPU、不用付費的翻譯出口。
 
 為什麼中間需要一個代理、它不解決什麼：[`design/why-proxy.md`](design/why-proxy.md)（`design/` 這些內部文件目前只有中文）。
