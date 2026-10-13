@@ -6,12 +6,12 @@
 ## 這裡有什麼
 
 - `SKILL.md`：技能本體，採 [Agent Skills](https://agentskills.io/specification) 的形狀（一個目錄 + frontmatter）。pi 與支援 Agent Skills 的 client 會從工作目錄往上找到 `.agents/skills/`，所以 **clone 這個 repo 之後技能通常已經被發現**，不需要另外安裝。
-- `README.md`／`README.en.md`：這份。人讀的是「自己接的三條路」，agent 讀的是下一節那段提示詞。
+- `README.md`：這份，**只有一份**（跟 `SKILL.md` 一樣，它是給 agent 讀的，agent 不分語言——AGENTS 規則 11）。人讀的是「自己接的三條路」，agent 讀的是下一節那段提示詞。
 - MCP server 的母本在同 repo 的 [`examples/mcp/`](../../../examples/mcp/README.md)：`server.mjs`、`mcp.json.example`（值留空）。
 
 ## 給 agent 的提示詞（直接貼給你自己的 agent）
 
-兩個語言版本這段內容**完全一致**——提示詞只該有一份，翻譯它反而會漂移。
+這段只有一份，**也不翻譯**——提示詞翻譯它反而會漂移。
 
 ```text
 You have a translation service available through this repo. Set it up, don't just read about it.
@@ -96,7 +96,7 @@ cd examples/mcp && ITP_BASE=... ITP_KEY=... npm run handshake
 
 ## 在 repo 裡的分工
 
-- 本目錄：技能本體 + 這份入口說明（人和 agent 都從這裡進）。repo 根目錄的 README 只跳到這裡，不重複說明。
+- 本目錄：技能本體 + 這份入口說明（人和 agent 都從這裡進），**兩個檔都只有繁中一份**。repo 根目錄的 README 只跳到這裡，不重複說明。
 - `examples/mcp/`：MCP server 的碼與最小接法（不含邊界與坑的說明，那些只寫一處）。
 - [`design/mcp-client.md`](../../../design/mcp-client.md)：實測證據與由來（含 25s 那道上限的前後對照、截尾偵測的兩條路）。
 - 個人層安裝處（例如 `~/.pi/agent/skills/index-translate/`）是**複本**，母本在這裡。改這裡，別改複本。

@@ -8,7 +8,7 @@
 **切塊、鑑權、強制串流全在代理那側**（AGENTS 規則 3／4／8），這個 client 不重複實作協定。
 
 **要從 agent 那一側看這件事**（技能怎麼裝、可以直接貼給 agent 的提示詞、完整的邊界與模型速度）：
-那份說明只寫一處，在 [`.agents/skills/index-translate/README.md`](../../.agents/skills/index-translate/README.md)（另有一份英文版）。
+那份說明只寫一處，在 [`.agents/skills/index-translate/README.md`](../../.agents/skills/index-translate/README.md)（跟 `SKILL.md` 一樣只有繁中一份：那是給 agent 讀的，規則 11）。
 這裡只留這份碼怎麼裝、怎麼接、怎麼驗、哪裡壞了。
 
 ## 接進你的 client

@@ -82,6 +82,13 @@
 - **CI 的 runner 注記**（不碰協定碼）⏱5：`actions/checkout@v4`／`actions/setup-node@v4` 會自報「Node 20 已棄用」
   警告（不影響結果）；`ubuntu-latest` 將於 2026-10-19 轉 Ubuntu 26 → 哪天換 `@v5` 即可。
 - **推鏡像** ⏱1：`git push github main`（CI 的載體，規則 12）。
+- **文件一致性：規則 14 講的「中英兩份」與實況相反** ⏱10（**要人定奪，agent 不要自己選**）：技能目錄
+  `.agents/skills/index-translate/` 現在只有 `SKILL.md` 與 `README.md`（`README.en.md` 已於 2026-10-13 刪除，
+  理由是那份的讀者是 agent，而規則 11 要雙語的從來是「給人讀的入口文件」；同一目錄的 `SKILL.md` 也一直只有一份）。
+  但規則 14 仍寫「那個目錄的 `README.md`（中英兩份）是唯一入口」，規則 11 的例外也只講 README 那對——兩者都與 repo
+  現況不符。**兩條路，選一條：**（甲）改規則 11／14，把界線寫成「雙語只用於根目錄那對 README，agent 面向的文件
+  一律只有一份」；（乙）把英文版補回來並讓 `lint:readme` 重新跑兩對。現況是 `lint:readme` 只跑根目錄那對，
+  `scripts/readme-parity.mjs` 未改（帶兩個路徑仍能比任何成對），所以選（乙）不用改工具。
 - （T5.1 已做完並線上驗證：見已完成 2026-10-11。要重現標記就用 `npm run deploy:vercel`——它會先設 `GIT_COMMIT`。）
 
 ## 已定案（不再列為待做，往後也不再重複提問）

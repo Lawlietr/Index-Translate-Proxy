@@ -9,7 +9,7 @@ compatibility: 先為 agent 配好這個 MCP（pi 是 `~/.pi/agent/mcp.json` 的
 
 本技能假定 agent 已接好一個 MCP server（母本在 repo 的 `examples/mcp/server.mjs`；`ITP_BASE` 填你自己那份部署的網址、`ITP_KEY` 填你設過的通行碼）。
 提供兩個工具：`translate`、`index_translate_models`。
-**設定步驟、邊界，以及一段可以直接交給你自己的 agent 的提示詞，在同目錄的 `README.md`／`README.en.md`；本檔只講怎麼用。**
+**設定步驟、邊界，以及一段可以直接交給你自己的 agent 的提示詞，在同目錄的 `README.md`；本檔只講怎麼用。**
 
 ## 先確認它在不在（不要假裝成功）
 
