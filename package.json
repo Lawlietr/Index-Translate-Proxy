@@ -12,7 +12,7 @@
     "deploy": "wrangler deploy",
     "test": "node --test 'tests/*.test.mjs'",
     "lint:zh": "node scripts/lint-zh.mjs",
-    "lint:readme": "node scripts/readme-parity.mjs",
+    "lint:readme": "node scripts/readme-parity.mjs && node scripts/readme-parity.mjs .agents/skills/index-translate/README.md .agents/skills/index-translate/README.en.md",
     "lint:secret": "node scripts/lint-secrets.mjs",
     "smoke": "node scripts/smoke-local.mjs",
     "serve-bridge": "node scripts/serve-vercel-bridge.mjs",

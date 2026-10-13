@@ -171,6 +171,11 @@
     證據與細節放 `design/`，`TODO.md` 只寫「要做什麼」。**可重跑的程式也在 repo**：證據用的一次性探測放
     `probes/`、client 範例放 `examples/`（兩者都不參與 `npm test`、不被入口 import）——`/tmp` 裡的腳本
     撐不過一次會話，而 `design/` 的結論要能被別人重跑。
+    **給 agent 用的東西放 `.agents/skills/<名字>/`**（Agent Skills 規格：pi 與其他 client 會從工作目錄往上找到
+    `.agents/skills/`，所以 clone 即被發現）。那個目錄的 `README.md`（中英兩份）是 **agent 用法的唯一入口**，
+    含一段可以直接貼給使用者 agent 的提示詞（兩份裡逐字相同——提示詞只該有一份）；**根目錄的 README 對這件事只跳轉、
+    不重複說明**。那對 README 由同一個 `scripts/readme-parity.mjs` 檢查（帶兩個路徑就能比任何成對的 README），
+    `npm run lint:readme` 已同時跑根目錄與技能目錄兩對。
 15. **對外文件不提未公開的專案：**姐妹專案仍在開發、短時間不會公開 → `README.md`（還有未來網站／說明檔）
     **不出現其名稱與內網 URL**（`192.168.x.x` 那種連結對外一定是碎的）。`AGENTS.md`、`design/` 這些 contributor
     文件可以提，但首次提到要標「未公開」，而且**引用過的事實要在本 repo 留下自己的實測證據**，

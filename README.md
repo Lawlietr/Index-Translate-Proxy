@@ -17,8 +17,8 @@
 
 - **網頁翻譯**：沉浸式翻譯（Immersive Translate）的「翻譯服務 → OpenAI → 自訂接口地址」填你自己的網址。
 - **任何 OpenAI 相容 client**：`curl`、OpenAI SDK、LangChain 之類的工具，填 base URL 就能用。
-- **交給 agent 翻譯**：想讓 agent（pi、Claude Desktop、其他 MCP client）自己把文件跟註解翻掉，
-  [`examples/mcp/`](examples/mcp/README.md) 有一份現成的 MCP client 與它的接法（通行碼走環境變數，不進 repo）。
+- **交給 agent 翻譯**：想讓 agent（pi、Claude Desktop、其他 MCP client）自己把文件跟註解翻掉——技能與 MCP 的接法、邊界，
+  還有一段可以直接貼給你 agent 的提示詞，都在 [`.agents/skills/index-translate/`](.agents/skills/index-translate/README.md)。
 - **自己的翻譯後端**：給自家 app／腳本一個不用 GPU、不用付費的翻譯出口。
 
 為什麼中間需要一個代理、它不解決什麼：[`design/why-proxy.md`](design/why-proxy.md)（`design/` 這些內部文件目前只有中文）。
@@ -101,6 +101,7 @@ curl -s -w "\nHTTP %{http_code}\n" -X POST "$B/v1/chat/completions" -H "content-
 | `MAX_LINE_CHARS` | `2000` | 只在行界切塊，所以這個值是單行上限（超長 → 413 並說明繞法） |
 | `MAX_TOKENS_DEFAULT` | `4096` | 客戶端沒帶 `max_tokens` 時補的值。**4,096 同時是上游的硬上限**（實測：要 16,384 也只給 4,096），設更大不會有效 |
 | `MAX_BODY_BYTES` | `16384` | 單塊 body 上限，超過 → 413 |
+| `model_name` | 無 | 插件／client 沒帶 `model` 時用哪個。留空＝用清單第一位（見下面那個 <details>） |
 
 要調就在 Vercel 的 Environment Variables 加同名變數，重新部署生效。
 
@@ -112,6 +113,40 @@ curl -s -w "\nHTTP %{http_code}\n" -X POST "$B/v1/chat/completions" -H "content-
 代理只會補這四項**協定層**參數（你的 prompt 一律不改）：`stream: true`、`stream_options.include_usage`、
 `chat_template_kwargs.enable_thinking:false`、`max_tokens`（你帶了就不動）。理由在
 [`design/why-proxy.md`](design/why-proxy.md) 與 [`design/streaming-and-chunking.md`](design/streaming-and-chunking.md)。
+
+**三個模型都能選**：插件的「模型」欄位（或 OpenAI 相容 client 的 `model`）填名稱就行，清單見下方那個 `<details>`。
+
+- 想要快就在插件裡選 `index-mt-9b`／`index-mt-2b`——**但我只測過短行的逐行對應，長文品質沒評量過**。
+- 不在放行清單上的名稱一律本地 **400**（訊息裡附可用清單），**不降級、不重試別個模型**——你選 9b 就不會默默跑 35B。
+
+<details>
+<summary><b>三個模型都能選，怎麼選</b>（速度、邊界，與它刻意不做的事）</summary>
+
+`/v1/models` 放行的有三個，插件的「模型」欄位直接填名稱就能用（`GET /v1/models` 由本代理回，不花上游配額）：
+
+- `Index-Translate-35B-A3B` —— 上游自己宣告的那個，品質最穩。預設就是它。
+- `index-mt-9b` / `index-mt-2b` —— 上游接受但**未宣告**的小模型。我測過的是**短行的逐行對應**，不是長文品質。
+- `index-mt-*-syllable` 刻意不放行（會漏行、丟編號）；`-preview` 這類名稱會被**靜默退回**成別個模型，也不放行。
+
+**速度會浮動，別把倍數當保證**：同一段輸入，一次測到 9b 約 2 倍、2b 約 3 倍；另一次同樣的輸入，2b 反而比 35B 慢。
+原因未查明（上游無 SLA）。能確定的是**行對應不隨模型變**：兩個小模型都是逐行對應、編號不亂。
+
+| 名稱 | 這次測到的速度 | 適合什麼 |
+|---|---|---|
+| `Index-Translate-35B-A3B` | 基準（一段 8 行短句 2.0s） | 品質優先、要引用與截圖、對外文件 |
+| `index-mt-9b` | 同輸入 1.0s | 大量文件、要速度又不能丟行對應 |
+| `index-mt-2b` | 同輸入 0.6s，但品質未評量 | 腳本與 agent 的機械用途（摘要、分類）、只想把行翻短 |
+
+三件事刻意不做，選模型時要知道：
+
+- **不做靜默降級，也不試探**：不在放行清單上的名稱一律本地 **400**，訊息裡附可用清單。你指定 9b 就不會偷偷跑 35B。
+- **不做 alias**（`fast`／`small`／`cheap` 那種），也不做任何品質評量——上面那欄是**我自己踩過的角度**，不是基準。
+- **不保證上游的模型清單不變**：它自己就會上下架（`index-homura-*` 有先例），所以「能用」是即時狀態，以 `GET /v1/models` 為準。
+- 被截尾的偵測與分批：見下面「出錯時怎麼看」裡的「最後幾行少了，怎麼辦」。
+
+要讓 agent 直接用（技能＋MCP），見 [`.agents/skills/index-translate/README.md`](.agents/skills/index-translate/README.md)。
+
+</details>
 
 <details>
 <summary><b>出錯時怎麼看</b>（status 與標頭對照）</summary>

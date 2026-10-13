@@ -4,7 +4,10 @@
 // 只有散文（標題文字、表格的文字欄位、程式碼註解）可以不同。漏同步其中一份時這條會擋下來。
 import { readFileSync } from "node:fs"
 
-const FILES = ["README.md", "README.en.md"]
+// 預設比對 repo 根目錄那對；帶兩個路徑就能比對其他成對的 README
+// （例如 `.agents/skills/*/README.md`）——同一個檢查器，不只根目錄那份受保護。
+const ARGV = process.argv.slice(2).filter((a) => !a.startsWith("-"))
+const FILES = ARGV.length === 2 ? ARGV : ["README.md", "README.en.md"]
 // 佔位符在兩種語言裡字面不同，但意義相同
 const PLACEHOLDERS = [
   [/<你的專案>/g, "<PROJECT>"],

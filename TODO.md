@@ -121,6 +121,9 @@
 - 真的啟用了才照規則 13 跑一次 `probe-live`／`probe-sse-timing`，並記錄出口狀態（412 本身也是要記錄的結果）。
 
 ## 已完成（最多五項，新在上）
+
+- 2026-10-13：**技能與 agent 說明進 repo 的標準位置 `.agents/skills/index-translate/`**（Agent Skills 規格：pi 與其他 client 會從工作目錄往上找到 `.agents/skills/` → clone 即被發現）。那個目錄的 `README.md`＋`README.en.md` 是 agent 用法的**唯一入口**，含一段可以直接貼給使用者 agent 的提示詞（兩份裡逐字相同——提示詞只該有一份）；根目錄 README 對這件事只跳轉、不重複說明。`scripts/readme-parity.mjs` 帶兩個路徑就能比任何成對 README，`npm run lint:readme` 同時跑根目錄與技能目錄兩對（兩對皆綠）。順帶記一個自己造的錯：修 TODO 的腳本裡跑過 `git checkout -- README.md`，把**未 commit 的模型選擇文件**（`model_name`、速度表、那個 <details>）一起吞了——已按原樣重建。教訓：腳本裡的 `git checkout` 不只回滾你正在改的那個檔。
+
 - 2026-10-13：**把代理接成 agent 的工具（`examples/mcp/`）＋ 通行碼的界線交給機器守** —— MCP client 的母本進
   repo（`server.mjs`、`mcp.json.example` 值留空、用法在該目錄的 README），證據與取捨在
   `design/mcp-client.md`；從 pi 內部真的呼叫過兩個工具（行對應 2/2、放行清單即時）。順帶拿到兩件事：
@@ -130,6 +133,7 @@
   中間塊被截只在 `x-proxy-chunk-truncated` 標頭看得到，而串流反而有逐塊視野（實測 `["stop","stop"]`）。
   協定碼未動（規則 6 不包層），只記錄。另新增**規則 17**（通行碼不進 repo）與 `npm run lint:secret`
   （已進 CI 第一步，負向測試做過：對真的 client 設定檔是紅的）。
+
 - 2026-10-11：**上游 `max_tokens` 硬上限證實 ＋「尾部少了」變成使用者能照做的說明**（`3f4b42a`、`6a82d93`）——
   一檔 `max_tokens:16384` 把 AGENTS 事實表最後一個「推定」換成實測（4,096 是硬上限，證據
   `tests/fixtures/ceiling-16384.summary.json` + `design/upstream-probe-2026-10-10.md` §11）；由它推出來的是
@@ -138,6 +142,7 @@
   `MAX_TOKENS_DEFAULT` 的可調上界夾到 4,096；README 兩份新增「最後幾行少了，怎麼辦」三種情況三種處理，
   順帶修掉「`x-proxy-hint` 只在錯誤回應出現」這處文件錯。測試 96 pass／0 fail、smoke 51 ok、兩份 README 對等。
   同批把 README 的 tagline **取消置中**（只置中標題與語言按鈕——三行置中讀起來很吃力，使用者回饋）。
+
 
 - 2026-10-11：**定位定案＋ CI 起跑（T3.1→T3.3）** —— 一次性探測專案（Vercel 兩個、CF 兩個）已全部清理，`probes/README.md` 與
   `design/egress-options.md` 同步為「已刪除、可重新部署」；**CI 改到 GitHub Actions**（AGENTS 規則 12 反轉，
@@ -168,12 +173,8 @@
   （上游 152 行跨 2,715ms、經代理 147 行跨 3,233ms）。順帶修掉該腳本的判定錯誤：固定 800ms 的地板會把
   「83 行跨 610ms」這種**快但真的增量**判成 FAIL；改成 `max(250ms, (行數-1)×6ms)`，並用「72 行同一瞬間 → 拒」
   這種形狀核過規則本身（不燒配額）。
+
 - 2026-10-10：**放行清單上線並線上探測** —— 逐個測過 `index-mt-2b/9b/-syllable`（`design/model-allowlist.md`）→
   放行 `Index-Translate-35B-A3B`/`index-mt-9b`/`index-mt-2b`，`-syllable` 因會漏行／丟編號不放行；
   `GET /v1/models` 改由本代理自己回。重新部署後線上 `probe-live` **21 ok / 0 fail / 1 skip**（跳過的是 per-instance 併發閘）、
   `probe-sse-timing` 真增量（跨度 1,114ms ≈ 上游 1,148ms）。另新增 `scripts/serve-vercel-bridge.mjs`（不起 Vercel 也能測「Vercel 這條路徑」）。
-- 2026-10-10：**搬到 Vercel 並線上探測** —— `https://index-translate-proxy.vercel.app` 上線（Edge runtime 入口
-  `api/index.js`，協定碼不重複），`probe-live` 全過、`probe-sse-timing` 兩側都**真增量**（首塊 434ms、跨度 1,112ms ≈ 上游 1,148ms）。
-  同時把 CF 那份也重新部署並探測：本地行為全過、**上游全部 412** → 印證「CF 出口那側被風控擋」。
-  新增 `scripts/probe-sse-timing.mjs`（用 curl 當 client，因為本機 JS client 會把 SSE 合併成一批，量出來的「緩衝」是假象）。
-

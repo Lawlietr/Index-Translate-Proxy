@@ -17,8 +17,8 @@ Use it for:
 
 - **Web page translation**: put your own URL into Immersive Translate's "Translation service → OpenAI → custom API endpoint" field.
 - **Any OpenAI-compatible client**: `curl`, the OpenAI SDKs, LangChain and friends — just set the base URL.
-- **Hand translation to an agent**: if you want your agent (pi, Claude Desktop, any other MCP client) to translate
-  documents and comments by itself, [`examples/mcp/`](examples/mcp/README.md) ships a working MCP client and how to wire it up (the passcode comes from an environment variable and never enters the repo).
+- **Hand translation to an agent**: let your agent (pi, Claude Desktop, any other MCP client) translate documents and
+  comments by itself — the skill and MCP wiring, the boundaries, and a prompt you can paste straight into your own agent: [`.agents/skills/index-translate/`](.agents/skills/index-translate/README.md).
 - **Your own translation backend**: a translation exit for your own apps and scripts that needs no GPU and costs nothing.
 
 Why a proxy is needed in the middle, and what it deliberately does not solve: [`design/why-proxy.md`](design/why-proxy.md) (Chinese).
@@ -103,6 +103,7 @@ debug that.
 | `MAX_LINE_CHARS` | `2000` | chunks are cut at line boundaries only, so this is the single-line limit (too long → 413 with a way around it) |
 | `MAX_TOKENS_DEFAULT` | `4096` | value injected when the client sends no `max_tokens`. **4,096 is also the upstream's hard ceiling** (measured: asking for 16,384 still yields 4,096), so a larger value does nothing |
 | `MAX_BODY_BYTES` | `16384` | per-chunk body limit, above that → 413 |
+| `model_name` | none | which model to use when the plugin/client sends no `model`. Empty = first entry in the list (see that <details> below) |
 
 To change any of them, add a variable with the same name in Vercel's Environment Variables and redeploy.
 
@@ -115,6 +116,40 @@ The proxy only ever adds these four **protocol-level** parameters (your prompt i
 `stream_options.include_usage`, `chat_template_kwargs.enable_thinking:false`, and `max_tokens` (untouched if you set it).
 The reasoning is in [`design/why-proxy.md`](design/why-proxy.md) and
 [`design/streaming-and-chunking.md`](design/streaming-and-chunking.md).
+
+**All three models are selectable**: put the name in the plugin's "Model" field (or in `model` for any OpenAI-compatible client); the list is in that `<details>` below.
+
+- Want speed? Pick `index-mt-9b`／`index-mt-2b` in the plugin — **but I only tested line-by-line correspondence on short lines; quality on long text is unmeasured**.
+- Anything not on the allow-list gets a local **400** (the message lists what is available). **No downgrade, no retry on another model** — if you picked 9b, 35B never runs behind your back.
+
+<details>
+<summary><b>All three models are selectable — how to choose</b> (speed, boundaries, and what it deliberately does not do)</summary>
+
+Three names are allowed by `/v1/models`, and you can put any of them straight into the plugin's "Model" field (`GET /v1/models` is answered by this proxy, so it costs no upstream quota):
+
+- `Index-Translate-35B-A3B` — the one upstream itself declares; the steadiest quality. It is the default.
+- `index-mt-9b` / `index-mt-2b` — smaller models upstream accepts but **does not declare**. What I tested is **line-by-line correspondence on short lines**, not long-text quality.
+- `index-mt-*-syllable` is deliberately not allowed (it drops lines and line numbers); names like `-preview` are **silently resolved** to a different model, so they are not allowed either.
+
+**Speed moves around, so do not treat a multiplier as a guarantee**: for the same input I measured 9b at about 2× and 2b at about 3× once; another run the same input made 2b slower than 35B.
+The cause is unexplained (upstream has no SLA). What is solid: **line correspondence does not depend on the model** — both smaller models returned line by line with the numbering intact.
+
+| Name | Speed in this measurement | What it suits |
+|---|---|---|
+| `Index-Translate-35B-A3B` | baseline (2.0s for a block of 8 short lines) | quality first, quotes and screenshots, anything public-facing |
+| `index-mt-9b` | 1.0s for the same input | volume, when speed matters but losing line correspondence does not |
+| `index-mt-2b` | 0.6s for the same input, quality unmeasured | scripts and agents doing mechanical work (summarise, classify), just shortening lines |
+
+Three things it deliberately does not do, worth knowing when picking:
+
+- **No silent downgrade, no probing**: any name off the allow-list is a local **400** with the available list in the message. Picking 9b means 35B will not quietly run instead.
+- **No aliases** (`fast`／`small`／`cheap` and friends), and no quality benchmarking — that column is **angles I walked myself**, not a baseline.
+- **No promise that upstream's model list stays**: it renames and withdraws models (`index-homura-*` did), so "available" is live state — trust `GET /v1/models`.
+- Detecting truncation and batching: see "What to do when the last lines are missing" inside "Reading errors" below.
+
+To let an agent use it directly (skill + MCP), see [`.agents/skills/index-translate/README.md`](.agents/skills/index-translate/README.md).
+
+</details>
 
 <details>
 <summary><b>Reading errors</b> (status and header reference)</summary>

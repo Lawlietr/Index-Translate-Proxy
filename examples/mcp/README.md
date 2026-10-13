@@ -7,6 +7,10 @@
 它做的事只有一件：把 `translate` 與 `index_translate_models` 兩個工具接到你那份部署的 `/v1`。
 **切塊、鑑權、強制串流全在代理那側**（AGENTS 規則 3／4／8），這個 client 不重複實作協定。
 
+**要從 agent 那一側看這件事**（技能怎麼裝、可以直接貼給 agent 的提示詞、完整的邊界與模型速度）：
+那份說明只寫一處，在 [`.agents/skills/index-translate/README.md`](../../.agents/skills/index-translate/README.md)（另有一份英文版）。
+這裡只留這份碼怎麼裝、怎麼接、怎麼驗、哪裡壞了。
+
 ## 接進你的 client
 
 ```bash
@@ -32,15 +36,14 @@ ITP_KEY=<你的 ITP_KEY> npm run handshake   # initialize + tools/list，不碰�
 看到 `serverInfo` 與兩個工具的名字就是通的。真的翻譯要自己發一次 `tools/call`（或從 client 裡叫），
 它會走 SSE——這是刻意的，理由與實測數字在 [`../../design/mcp-client.md`](../../design/mcp-client.md) §2。
 
-## 用之前要知道的邊界（都是上游/代理的事實，不是這個 client 的偏好）
+## 用之前要知道的邊界（只留與這份碼有關的兩條）
 
 - **翻譯指令由這個 client 放進 `system`**：只送編號句而不帶指令時，上游會加前言、把每句展開成多語言列表，
   編號對應就破掉（AGENTS 事實表「行對應」列）。所以這裡一律帶指令，不讓上游自己決定輸出形狀。
 - **編號行逐行對應**：`keep_numbering`（預設 true）保留 `1.` `2.` 這種行結構，適合清單、步驟、commit 式列表。
-- **超過 2,500 字元會切塊**（`MAX_INPUT_CHARS`），由代理在**行界**切再接回，一次傳整段即可；
-  但**單行不得超過 2,000 字元**（`MAX_LINE_CHARS`）——行內不切是規則 4，超長單行會 413。
-- **輸出側有上限**（上游預設 2,048、硬上限 4,096 completion tokens）。被截尾時工具會明確標示，不會假裝完整。
-- **不做靜默降級**：指定不可用的模型就報錯並附上可用清單，不會偷偷換一個。
+
+其餘的邊界（分批與單行 2,000 字元、輸出側上限與 `truncated`、不降級、429 怎麼做）只寫一處：
+見 [`.agents/skills/index-translate/README.md`](../../.agents/skills/index-translate/README.md) 與同目錄的 `SKILL.md`。
 
 ## 想改它
 
