@@ -16,9 +16,8 @@
 name: live-probe
 
 on:
-  schedule:
-    # 07:17 UTC（台北 15:17）。避開整點——GitHub 的排程在整點最擠。一天一次：上游漂移的節奏就是這樣。
-    - cron: "17 7 * * *"
+  # 排程已取消（2026-10-27）：GitHub runner 出口打上游會偶發 412（規則 12 已知限制），
+  # 每天跑的紅是噪音不是漂移，失去「週期警示」的意義。保留 workflow_dispatch 讓需要時手動跑。
   workflow_dispatch:
 
 permissions:
